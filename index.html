@@ -1592,31 +1592,81 @@ function renderRiepilogo(){
 function fmtMese(n){return['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'][n]||'';}
 function fmtMeseShort(n){return['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][n]||'';}
 
+function calcTot(movs){
+  let t=0;
+  movs.forEach(m=>{
+    const n=netto(m.importo,m.split),tp=tipo(n,m.tipoOverride);
+    if(riepilogoTipo==='tutte')t+=n;
+    else if(riepilogoTipo==='uscite'&&tp==='S')t+=n;
+    else if(riepilogoTipo==='entrate'&&tp==='E')t+=n;
+  });
+  return t;
+}
+
+function mkRow(label,sublabel,amount,arrow,clickFn){
+  const d=document.createElement('div');
+  d.className='riepilogo-row';
+  const color=amount>=0?'#86efac':'#fca5a5';
+  d.innerHTML='<div style="flex:1;min-width:0"><div class="riepilogo-label">'+esc(String(label))+'</div>'+
+    (sublabel?'<div class="riepilogo-count">'+sublabel+'</div>':'')+
+    '</div><div style="text-align:right;margin-left:12px">'+
+    '<div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(amount)+'</div>'+
+    (arrow?'<div style="font-size:11px;color:#4a5068">→</div>':'')+
+    '</div>';
+  if(clickFn)d.addEventListener('click',clickFn);
+  return d;
+}
+
+function mkRowBar(label,sublabel,amount,maxAbs,clickFn){
+  const d=document.createElement('div');
+  d.className='riepilogo-row';
+  const color=amount>=0?'#86efac':'#fca5a5';
+  const barColor=amount>=0?'#10b981':'#ef4444';
+  const barW=maxAbs>0?Math.round(Math.abs(amount)/maxAbs*100):0;
+  d.innerHTML='<div style="flex:1;min-width:0">'+
+    '<div class="riepilogo-label">'+esc(String(label))+'</div>'+
+    '<div class="riepilogo-bar-wrap"><div class="riepilogo-bar" style="width:'+barW+'%;background:'+barColor+'"></div></div>'+
+    (sublabel?'<div class="riepilogo-count">'+sublabel+'</div>':'')+
+    '</div><div style="text-align:right;margin-left:12px">'+
+    '<div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(amount)+'</div>'+
+    '<div style="font-size:11px;color:#4a5068">→</div>'+
+    '</div>';
+  if(clickFn)d.addEventListener('click',clickFn);
+  return d;
+}
+
+function mkTotal(label,amount){
+  const d=document.createElement('div');
+  d.className='riepilogo-total';
+  const color=amount>=0?'#86efac':'#fca5a5';
+  d.innerHTML='<div><div class="riepilogo-total-label">'+label+'</div></div>'+
+    '<div class="riepilogo-total-value" style="color:'+color+'">'+fmtEur(amount)+'</div>';
+  return d;
+}
+
+function setRiepilogoContent(nodes){
+  const cont=document.getElementById('riepilogo-content');
+  cont.innerHTML='';
+  nodes.forEach(n=>{if(n)cont.appendChild(n);});
+}
+
 function renderRiepilogoAnni(){
   const anni=[...new Set(S.movimenti.map(m=>m.data?parseInt(m.data.slice(0,4)):null).filter(Boolean))].sort().reverse();
   if(!anni.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato</div>';return;}
-  let html='<div class="setup-info" style="margin-bottom:14px">Seleziona un anno dal menu in alto per vedere i mesi, oppure tocca un anno qui sotto.</div>';
+  const nodes=[];
+  const hint=document.createElement('div');
+  hint.className='setup-info';hint.style.marginBottom='14px';
+  hint.textContent='Tocca un anno per vedere i mesi.';
+  nodes.push(hint);
   let grandTotal=0;
-  const rows=anni.map(anno=>{
+  anni.forEach(anno=>{
     const movs=S.movimenti.filter(m=>m.data&&m.data.startsWith(String(anno))&&m.categoria!=='Saldo Iniziale');
-    let tot=0;
-    movs.forEach(m=>{const n=netto(m.importo,m.split);const t=tipo(n,m.tipoOverride);
-      if(riepilogoTipo==='tutte')tot+=n;
-      else if(riepilogoTipo==='uscite'&&t==='S')tot+=n;
-      else if(riepilogoTipo==='entrate'&&t==='E')tot+=n;
-    });
+    const tot=calcTot(movs);
     grandTotal+=tot;
-    return{anno,tot,count:movs.length};
+    nodes.push(mkRow(String(anno),movs.length+' movimenti',tot,true,()=>drillAnno(anno)));
   });
-  html+=rows.map(r=>{
-    const color=r.tot>=0?'#86efac':'#fca5a5';
-    return`<div class="riepilogo-row" onclick="drillAnno(${r.anno})">
-      <div><div class="riepilogo-label">${r.anno}</div><div class="riepilogo-count">${r.count} movimenti</div></div>
-      <div style="text-align:right"><div class="riepilogo-amount" style="color:${color}">${fmtEur(r.tot)}</div><div style="font-size:11px;color:#4a5068">→</div></div>
-    </div>`;
-  }).join('');
-  html+=`<div class="riepilogo-total"><div><div class="riepilogo-total-label">Totale complessivo</div></div><div class="riepilogo-total-value">${fmtEur(grandTotal)}</div></div>`;
-  document.getElementById('riepilogo-content').innerHTML=html;
+  nodes.push(mkTotal('Totale complessivo',grandTotal));
+  setRiepilogoContent(nodes);
 }
 
 function drillAnno(anno){
