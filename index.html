@@ -193,7 +193,7 @@ select option{background:#111827}
 <div class="side-menu" id="side-menu">
   <div class="side-menu-header">
     <div class="side-menu-logo">💰 FINANZE</div>
-    <div class="side-menu-sub">gestionale personale</div>
+    <div class="side-menu-sub" id="menu-username">gestionale personale</div>
   </div>
   <nav class="side-menu-nav">
     <div class="nav-item active" id="nav-movimenti" onclick="switchTab('movimenti')"><span class="nav-icon">📋</span>Movimenti</div>
@@ -214,12 +214,14 @@ select option{background:#111827}
     <div class="logo-wrap"><span class="logo-icon">💰</span><span class="logo-text">FINANZE</span><span class="logo-sub">gestionale personale</span></div>
     <div id="setup-first" style="display:none">
       <div class="setup-info" style="margin-bottom:14px"><b>Benvenuto!</b> Imposta una password. Non è recuperabile se la dimentichi.</div>
-      <div class="modal-row"><label class="field-label">Nuova password</label><input id="setup-pass" type="password" placeholder="almeno 4 caratteri"/></div>
-      <div class="modal-row"><label class="field-label">Conferma</label><input id="setup-pass2" type="password" placeholder="ripeti"/></div>
+      <div class="modal-row"><label class="field-label">Nome utente</label><input id="setup-username" type="text" autocomplete="username" placeholder="es. Lorenzo"/></div>
+      <div class="modal-row"><label class="field-label">Password</label><input id="setup-pass" type="password" autocomplete="new-password" placeholder="almeno 4 caratteri"/></div>
+      <div class="modal-row"><label class="field-label">Conferma password</label><input id="setup-pass2" type="password" autocomplete="new-password" placeholder="ripeti"/></div>
       <button class="btn-primary" onclick="doSetupPassword()">Imposta password</button>
     </div>
     <div id="setup-login" style="display:none">
-      <div class="modal-row"><label class="field-label">Password</label><input id="login-pass" type="password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+      <div class="modal-row"><label class="field-label">Nome utente</label><input id="login-username" type="text" autocomplete="username" placeholder="nome utente"/></div>
+      <div class="modal-row"><label class="field-label">Password</label><input id="login-pass" type="password" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"/></div>
       <button class="btn-primary" onclick="doLogin()">Sblocca</button>
       <button class="btn-ghost" style="margin-top:6px" onclick="resetApp()">Reset completo</button>
     </div>
@@ -479,11 +481,15 @@ function getLists(){
 // ── PASSWORD ───────────────────────────────────────────────────────────────
 async function hashPass(p){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(p));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function doSetupPassword(){
+  const username=document.getElementById('setup-username').value.trim();
   const p1=document.getElementById('setup-pass').value,p2=document.getElementById('setup-pass2').value;
+  if(!username)return toast('Inserisci un nome utente','error');
   if(!p1||p1.length<4)return toast('Minimo 4 caratteri','error');
   if(p1!==p2)return toast('Le password non coincidono','error');
   await put('config',{key:'pwhash',value:await hashPass(p1)});
-  S.unlocked=true;document.getElementById('setup-pass').value='';document.getElementById('setup-pass2').value='';
+  await put('config',{key:'username',value:username});
+  S.unlocked=true;
+  document.getElementById('setup-pass').value='';document.getElementById('setup-pass2').value='';
   const movs=await getAll('movimenti');
   if(movs.length===0)showScreen('import');else await loadAndShow();
 }
@@ -494,11 +500,24 @@ async function doLogin(){
   if(await hashPass(pass)!==stored.value)return toast('Password errata','error');
   document.getElementById('login-pass').value='';S.unlocked=true;await loadAndShow();
 }
+async function prefillUsername(){
+  const cfg=await getOne('config','username');
+  if(cfg&&cfg.value){
+    const el=document.getElementById('login-username');
+    if(el)el.value=cfg.value;
+  }
+}
 function lockApp(){S.unlocked=false;document.getElementById('setup-first').style.display='none';document.getElementById('setup-login').style.display='block';showScreen('setup');}
 async function resetApp(){if(!confirm('Cancella TUTTI i dati?'))return;await clearStore('movimenti');await clearStore('config');await clearStore('regole');toast('App resettata');setTimeout(()=>location.reload(),800);}
 
 // ── LOAD ───────────────────────────────────────────────────────────────────
-async function loadAndShow(){S.movimenti=await getAll('movimenti');S.regole=await getAll('regole');showScreen('movimenti');}
+async function loadAndShow(){
+  S.movimenti=await getAll('movimenti');S.regole=await getAll('regole');
+  const ucfg=await getOne('config','username');
+  const el=document.getElementById('menu-username');
+  if(el&&ucfg&&ucfg.value)el.textContent='Ciao, '+ucfg.value+' 👋';
+  showScreen('movimenti');
+}
 async function importSeedData(){
   toast('Importazione in corso...');
   const docs=SEED.movimenti.map((m,i)=>({id:i+1,data:m.d,portafoglio:m.p,descrizione:m.desc,categoria:m.c,importo:m.i,split:m.s,conchi:m.cc,tipoOverride:m.t==='-'?'-':null}));
@@ -677,12 +696,22 @@ function filterPicker(){
   const q=(document.getElementById('picker-search').value||'').toLowerCase().trim();
   const cur=getCurrentPickerValue();
   const items=pickerItems.filter(i=>!q||i.toLowerCase().includes(q));
-  document.getElementById('picker-list').innerHTML=items.map(i=>`<div class="picker-item ${i===cur?'selected':''}" onclick="selectPickerItem(${JSON.stringify(i)})">${esc(i)}</div>`).join('')||`<div style="padding:20px;text-align:center;color:#4a5068">Nessun risultato</div>`;
-  // Show add button with current search text
+  const list=document.getElementById('picker-list');
+  list.innerHTML='';
+  if(!items.length){
+    list.innerHTML='<div style="padding:20px;text-align:center;color:#4a5068">Nessun risultato</div>';
+  } else {
+    items.forEach(i=>{
+      const div=document.createElement('div');
+      div.className='picker-item'+(i===cur?' selected':'');
+      div.textContent=i;
+      div.addEventListener('click',()=>selectPickerItem(i));
+      list.appendChild(div);
+    });
+  }
   const q2=document.getElementById('picker-search').value.trim();
-  const addBtn=document.getElementById('picker-add-btn');
   document.getElementById('picker-add-label').textContent=q2?`Aggiungi "${q2}"`:pickerAddLabel;
-  addBtn.style.display='flex';
+  document.getElementById('picker-add-btn').style.display='flex';
 }
 function getCurrentPickerValue(){
   if(pickerType==='portafoglio')return document.getElementById('trigger-portafoglio-label').dataset.value||'';
@@ -1000,7 +1029,7 @@ async function doImport(e){
   document.getElementById('loading-overlay').style.display='none';
   const pw=await getOne('config','pwhash');
   if(!pw){document.getElementById('setup-first').style.display='block';document.getElementById('setup-login').style.display='none';}
-  else{document.getElementById('setup-first').style.display='none';document.getElementById('setup-login').style.display='block';setTimeout(()=>document.getElementById('login-pass').focus(),100);}
+  else{document.getElementById('setup-first').style.display='none';document.getElementById('setup-login').style.display='block';setTimeout(async()=>{await prefillUsername();document.getElementById('login-pass').focus();},100);}
   showScreen('setup');
 })();
 </script>
