@@ -594,18 +594,25 @@ function renderMovimenti(){
 function setFilter(kind,val){if(kind==='anno')state.filterAnno=val;else state.filterCat=val;renderMovimenti();}
 
 // ── CONTI ──────────────────────────────────────────────────────────────────
-function renderConti(){
-  const saldiPort={};let ent=0,usc=0,prestitoAle=0;
+function calcSaldi(inclPrestito){
+  // inclPrestito: se true include Prestito Ale nel patrimonio netto
+  const saldiPort={};
+  let ent=0,usc=0,prestitoAleSplit=0;
   const anno=new Date().getFullYear().toString();
+  const escPrestito=!inclPrestito; // default: escludi Prestito Ale
 
   for(const m of state.movimenti){
-    if(!m.portafoglio)continue;
-    if(m.portafoglio==='Debiti/Crediti'){
-      if(m.conchi!=='Prestito Ale'&&m.split!=null)saldiPort['Debiti/Crediti']=(saldiPort['Debiti/Crediti']||0)+m.split;
-    } else {
-      if(m.importo!=null)saldiPort[m.portafoglio]=(saldiPort[m.portafoglio]||0)+m.importo;
+    const p=m.portafoglio;if(!p)continue;
+
+    // Saldi reali: solo portafogli veri (non Debiti/Crediti che è virtuale)
+    if(p!=='Debiti/Crediti'){
+      if(m.importo!=null)saldiPort[p]=(saldiPort[p]||0)+m.importo;
     }
-    if(m.conchi==='Prestito Ale'&&m.split!=null)prestitoAle+=m.split;
+
+    // Prestito Ale: somma degli split con conchi='Prestito Ale'
+    if(m.conchi==='Prestito Ale'&&m.split!=null)prestitoAleSplit+=m.split;
+
+    // Entrate/uscite anno corrente (escludi saldi iniziali)
     if(m.data.startsWith(anno)&&m.categoria!=='Saldo Iniziale'){
       const n=computeNetto(m.importo,m.split);
       const t=computeTipo(n,m.tipoOverride);
@@ -613,9 +620,24 @@ function renderConti(){
     }
   }
 
+  // Debiti/Crediti = somma split escludendo Prestito Ale (sempre positiva = credito)
+  let creditiTot=0;
+  for(const m of state.movimenti){
+    if(m.conchi&&m.conchi!=='Prestito Ale'&&m.split!=null)creditiTot+=m.split;
+  }
+
   const patrimLordo=Object.values(saldiPort).reduce((a,b)=>a+b,0);
-  const patrimNetto=patrimLordo-prestitoAle;
+  // netto: se escludiamo Prestito Ale, sottraiamo il suo split (che è negativo, quindi aggiungiamo abs)
+  const patrimNetto=inclPrestito?patrimLordo:patrimLordo-prestitoAleSplit;
+
+  return {saldiPort,ent,usc,patrimLordo,patrimNetto,prestitoAleSplit,creditiTot};
+}
+
+function renderConti(){
+  const inclPrestito=state.inclPrestito||false;
+  const {saldiPort,ent,usc,patrimLordo,patrimNetto,prestitoAleSplit,creditiTot}=calcSaldi(inclPrestito);
   const flusso=ent+usc;
+  const anno=new Date().getFullYear().toString();
 
   document.getElementById('kpi-entrate').textContent=fmtEurShort(ent);
   document.getElementById('kpi-uscite').textContent=fmtEurShort(usc);
@@ -626,15 +648,30 @@ function renderConti(){
   document.getElementById('kpi-e-label').textContent='Entrate '+anno;
   document.getElementById('kpi-u-label').textContent='Uscite '+anno;
 
-  const ordine=['Intesa','Credifriuli','Revolut','Satispay','Cash','Blu Amex','Amex Gold','Debiti/Crediti'];
+  const ordine=['Intesa','Credifriuli','Revolut','Satispay','Cash','Blu Amex','Amex Gold'];
   const altri=Object.keys(saldiPort).filter(k=>!ordine.includes(k)).sort();
   const lista=[...ordine.filter(p=>p in saldiPort),...altri];
 
-  let html=`<div class="patrimonio-card">
-    <div class="patrimonio-label">Patrimonio netto</div>
+  // Toggle Prestito Ale
+  const toggleChecked=inclPrestito?'checked':'';
+  let html=`
+  <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="color:#f0ede8;font-weight:700;font-size:13px">Includi Prestito Ale</div>
+      <div style="color:#4a5068;font-size:11px;margin-top:2px">+€ 18.500 al patrimonio</div>
+    </div>
+    <div class="toggle ${inclPrestito?'on':''}" onclick="togglePrestito()" id="prestito-toggle"></div>
+  </div>
+  <div class="patrimonio-card">
+    <div class="patrimonio-label">${inclPrestito?'Patrimonio lordo (con prestito Ale)':'Patrimonio netto (senza prestito Ale)'}</div>
     <div class="patrimonio-value">${fmtEur(patrimNetto)}</div>
     <div class="patrimonio-row">
-      <div class="patrimonio-sub">Lordo: ${fmtEur(patrimLordo)}<br>Prestito Ale escluso</div>
+      <div class="patrimonio-sub">
+        ${inclPrestito
+          ? 'Prestito Ale incluso (€ '+Math.abs(prestitoAleSplit).toLocaleString('it-IT',{minimumFractionDigits:2})+')'
+          : 'Lordo: '+fmtEur(patrimLordo)+'  ·  Prestito Ale escluso'
+        }
+      </div>
     </div>
   </div>
   <div class="section-title" style="margin-top:20px">Portafogli</div>`;
@@ -658,6 +695,11 @@ function renderConti(){
   document.getElementById('conti-content').innerHTML=html;
 }
 
+function togglePrestito(){
+  state.inclPrestito=!state.inclPrestito;
+  renderConti();
+}
+
 // ── CREDITI/DEBITI ─────────────────────────────────────────────────────────
 function renderCrediti(){
   const saldiPer={};const splitMovs=[];
@@ -668,9 +710,22 @@ function renderCrediti(){
     }
   }
 
-  const persone=Object.keys(saldiPer).map(p=>({nome:p,saldo:saldiPer[p]})).sort((a,b)=>Math.abs(b.saldo)-Math.abs(a.saldo));
+  // Separa Prestito Ale dagli altri
+  const prestitoAle=saldiPer['Prestito Ale']||0;
+  const altriSaldi=Object.entries(saldiPer)
+    .filter(([k])=>k!=='Prestito Ale')
+    .map(([nome,saldo])=>({nome,saldo}))
+    .sort((a,b)=>Math.abs(b.saldo)-Math.abs(a.saldo));
 
-  const phtml=persone.map(p=>{
+  // Totale crediti/debiti (escluso Prestito Ale)
+  const totaleCD=altriSaldi.reduce((a,b)=>a+b.saldo,0);
+
+  let phtml=`<div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+    <div style="color:#8a8fa8;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Saldo netto totale</div>
+    <div style="font-weight:900;font-size:20px;color:${totaleCD>0?'#86efac':totaleCD<0?'#fca5a5':'#cbd5e1'}">${fmtEur(totaleCD)}</div>
+  </div>`;
+
+  phtml+=altriSaldi.map(p=>{
     const cls=p.saldo>0.01?'credito':p.saldo<-0.01?'debito':'pari';
     const stato=p.saldo>0.01?'✓ CREDITO — ti deve':p.saldo<-0.01?'✗ DEBITO — devi tu':'= PARI';
     const sc=p.saldo>0.01?'#86efac':p.saldo<-0.01?'#fca5a5':'#cbd5e1';
@@ -684,6 +739,18 @@ function renderCrediti(){
       </div>
     </div>`;
   }).join('');
+
+  // Prestito Ale separato in fondo
+  if(prestitoAle!==0){
+    phtml+=`<div style="margin-top:8px;background:linear-gradient(135deg,#1e1b4b,#1e3a8a);border:1px solid rgba(30,64,175,0.4);border-radius:14px;padding:16px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="color:#93c5fd;font-weight:900;font-size:15px">Prestito Ale</div>
+        <div style="color:rgba(147,197,253,0.6);font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-top:3px">Fuori conteggio principale</div>
+      </div>
+      <div style="font-weight:900;font-size:20px;color:#93c5fd">${fmtEur(prestitoAle)}</div>
+    </div>`;
+  }
+
   document.getElementById('persone-list').innerHTML=phtml||'<div class="empty-state">Nessun credito/debito</div>';
 
   // Storico split ordinato per data desc
