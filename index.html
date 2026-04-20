@@ -84,9 +84,11 @@ select option { background: #111827; }
 .filter-chip { flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 700; color: #8a8fa8; cursor: pointer; white-space: nowrap; }
 .filter-chip.active { background: rgba(245,158,11,0.12); border-color: #f59e0b; color: #f59e0b; }
 
-.conto-card { background: #111827; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-.conto-name { color: #f0ede8; font-weight: 700; font-size: 14px; }
-.conto-saldo { color: #f59e0b; font-weight: 900; font-size: 16px; }
+.conto-card { background: #111827; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 14px 14px 14px 18px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; overflow: hidden; position: relative; }
+.conto-card::before { content: ‘’; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(–port-color, #f59e0b); border-radius: 2px 0 0 2px; }
+.conto-name { color: #f0ede8; font-weight: 700; font-size: 15px; }
+.conto-sub { font-size: 10px; color: #4a5068; margin-top: 2px; letter-spacing: 1px; text-transform: uppercase; }
+.conto-saldo { font-weight: 900; font-size: 18px; }
 
 .persona-card { background: #111827; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 16px; margin-bottom: 8px; }
 .persona-row { display: flex; justify-content: space-between; align-items: center; }
@@ -698,7 +700,10 @@ function renderMovimenti() {
     const dotColor = tipo === 'E' ? '#10b981' : tipo === '-' ? '#4a5068' : '#ef4444';
     const splitLine = m.split ? `<div class="mov-split">split ${fmtEur(m.split)} ${m.conchi ? '(' + m.conchi + ')' : ''}</div>` : '';
     const pills = [];
-    if (m.portafoglio) pills.push(`<span class="mov-meta-pill">${m.portafoglio}</span>`);
+    if (m.portafoglio) {
+      const pc = portColor(m.portafoglio);
+      pills.push(`<span class="mov-meta-pill" style="border-left:2px solid ${pc}">${m.portafoglio}</span>`);
+    }
     if (m.categoria) pills.push(`<span class="mov-meta-pill">${m.categoria}</span>`);
     html += `<div class="mov-card" onclick="editMov(${m.id})">
       <div class="mov-dot" style="background:${dotColor}"></div>
@@ -731,16 +736,28 @@ function escapeHTML(s) {
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTI
 // ═══════════════════════════════════════════════════════════════════════════
+// Colori portafogli (come richiesto)
+const PORT_COLORS = {
+  'Satispay':       '#ef4444',   // rosso
+  'Credifriuli':    '#67c5e8',   // azzurro chiaro
+  'Revolut':        '#8b5cf6',   // violetto
+  'Intesa':         '#86efac',   // verde chiaro
+  'Cash':           '#16a34a',   // verde scuro
+  'Debiti/Crediti': '#94a3b8',   // grigio chiaro
+  'Amex Gold':      '#f59e0b',   // oro
+  'Blu Amex':       '#1e40af',   // blu scuro
+};
+function portColor(name) {
+  return PORT_COLORS[name] || '#8a8fa8';
+}
+
 function renderConti() {
-  // Patrimonio = somma di tutti gli importi per portafoglio
   const saldiPort = {};
   let entrate2026 = 0, uscite2026 = 0;
-  let creditiDebitiSaldo = 0;
 
   for (const m of state.movimenti) {
     if (!m.portafoglio) continue;
 
-    // Saldo portafoglio: somma importi (NON netto). Eccezione: Debiti/Crediti = somma split (escl. Prestito Ale)
     if (m.portafoglio === 'Debiti/Crediti') {
       if (m.conchi !== 'Prestito Ale' && m.split !== null && m.split !== undefined) {
         saldiPort['Debiti/Crediti'] = (saldiPort['Debiti/Crediti'] || 0) + m.split;
@@ -751,8 +768,9 @@ function renderConti() {
       }
     }
 
-    // Entrate/uscite 2026 (netto, escl saldi iniziali)
-    if (m.data.startsWith('2026') && m.categoria !== 'Saldo Iniziale') {
+    // Entrate/uscite anno corrente (escludi saldi iniziali)
+    const annoCorrente = new Date().getFullYear().toString();
+    if (m.data.startsWith(annoCorrente) && m.categoria !== 'Saldo Iniziale') {
       const netto = computeNetto(m.importo, m.split);
       const tipo = computeTipo(netto, m.tipoOverride);
       if (tipo === 'E') entrate2026 += netto;
@@ -760,6 +778,7 @@ function renderConti() {
     }
   }
 
+  // KPI
   const patrimonio = Object.values(saldiPort).reduce((a, b) => a + b, 0);
   document.getElementById('kpi-patrimonio').textContent = fmtEurShort(patrimonio);
   document.getElementById('kpi-entrate').textContent = fmtEurShort(entrate2026);
@@ -769,19 +788,28 @@ function renderConti() {
   flussoEl.textContent = fmtEurShort(flusso);
   flussoEl.className = 'kpi-value ' + (flusso > 0 ? 'pos' : flusso < 0 ? 'neg' : '');
 
+  // Lista portafogli con colori
   const ordine = ['Intesa', 'Credifriuli', 'Revolut', 'Satispay', 'Cash', 'Blu Amex', 'Amex Gold', 'Debiti/Crediti'];
-  const altri = Object.keys(saldiPort).filter(k => !ordine.includes(k));
+  const altri = Object.keys(saldiPort).filter(k => !ordine.includes(k)).sort();
   const listaOrdinata = [...ordine.filter(p => p in saldiPort), ...altri];
+
+  if (listaOrdinata.length === 0) {
+    document.getElementById('conti-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💳</div><div>Nessun portafoglio trovato.<br>Aggiungi il primo movimento.</div></div>';
+    return;
+  }
 
   const html = listaOrdinata.map(p => {
     const saldo = saldiPort[p] || 0;
-    const color = saldo >= 0 ? '#f59e0b' : '#ef4444';
-    return `<div class="conto-card">
-      <div class="conto-name">${p}</div>
-      <div class="conto-saldo" style="color:${color}">${fmtEur(saldo)}</div>
+    const pc = portColor(p);
+    const saldoColor = saldo < -0.01 ? '#ef4444' : '#f0ede8';
+    return `<div class="conto-card" style="--port-color:${pc}">
+      <div>
+        <div class="conto-name">${p}</div>
+      </div>
+      <div class="conto-saldo" style="color:${saldoColor}">${fmtEur(saldo)}</div>
     </div>`;
   }).join('');
-  document.getElementById('conti-list').innerHTML = html || '<div class="empty-state">Nessun portafoglio</div>';
+  document.getElementById('conti-list').innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
