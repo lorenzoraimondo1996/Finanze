@@ -137,6 +137,7 @@ select option{background:#111827}
 .modal-overlay.show{display:flex}
 .modal{background:#111827;border-top:2px solid #f59e0b;border-radius:20px 20px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding:20px 16px calc(env(safe-area-inset-bottom,0px) + 20px);animation:slideUp 0.25s ease-out}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 .modal-handle{width:40px;height:4px;background:rgba(255,255,255,0.15);border-radius:2px;margin:0 auto 16px}
 .modal-title{text-align:center;color:#f59e0b;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px}
 .modal-row{margin-bottom:14px}
@@ -180,6 +181,11 @@ select option{background:#111827}
 .setup-info{background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:12px 14px;font-size:12px;color:#8a8fa8;line-height:1.6}
 .setup-info b{color:#f59e0b}
 .divider{height:1px;background:rgba(255,255,255,0.06);margin:16px 0}
+.rec-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;cursor:pointer;color:#8a8fa8;font-size:12px;font-weight:700;transition:all 0.15s}
+.rec-btn div{margin-top:4px;font-size:11px;letter-spacing:0.5px}
+.rec-btn.active{background:rgba(245,158,11,0.12);border-color:#f59e0b;color:#f59e0b}
+.day-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;color:#8a8fa8;font-size:12px;font-weight:700}
+.day-btn.active{background:rgba(245,158,11,0.15);border-color:#f59e0b;color:#f59e0b}
 </style>
 
 </head>
@@ -320,9 +326,9 @@ select option{background:#111827}
       <label class="field-label">Importo</label>
       <div style="display:flex;align-items:center;gap:8px">
         <button type="button" id="segno-btn" onclick="toggleSegno()" style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;font-family:'Nunito',sans-serif">−</button>
-        <input type="text" inputmode="decimal" id="mov-importo" placeholder="45,50" style="flex:1"/>
+        <input type="text" inputmode="decimal" id="mov-importo" placeholder="45,50" style="flex:1" oninput="autoSuggestHalf()"/>
       </div>
-      <div style="font-size:11px;color:#4a5068;margin-top:4px">Usa il bottone − / + per scegliere il segno</div>
+      <div id="importo-hint" style="font-size:11px;color:#4a5068;margin-top:4px">Usa il bottone − / + per scegliere il segno</div>
     </div>
     <div class="split-toggle" onclick="toggleSplit()">
       <span style="color:#f0ede8;font-weight:700;font-size:13px">Condivisa con qualcuno</span>
@@ -330,7 +336,14 @@ select option{background:#111827}
     </div>
     <div class="split-fields" id="split-fields">
       <div><label class="field-label">Con chi</label><div id="trigger-conchi" class="picker-trigger" onclick="openPicker('conchi')"><span id="trigger-conchi-label" class="picker-trigger-placeholder">— seleziona —</span><span class="picker-trigger-arrow">▾</span></div></div>
-      <div><label class="field-label">Quota sua (+ = ti rimborsa)</label><input type="text" inputmode="decimal" id="mov-split" placeholder="22,50"/></div>
+      <div>
+        <label class="field-label">Quota sua</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" id="split-segno-btn" onclick="toggleSplitSegno()" style="background:rgba(16,185,129,0.15);color:#86efac;border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px 14px;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;font-family:'Nunito',sans-serif">＋</button>
+          <input type="text" inputmode="decimal" id="mov-split" placeholder="22,50" style="flex:1" oninput="this._autoSuggested=false"/>
+        </div>
+        <div style="font-size:10px;color:#4a5068;margin-top:3px">＋ ti rimborsa · − tu paghi per lui</div>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeMovModal()">Annulla</button>
@@ -371,6 +384,40 @@ select option{background:#111827}
     <div class="section-title">Movimenti generati</div>
     <div id="reg-steps-list"></div>
     <button class="btn-accent" onclick="addRegolaStep()" style="margin-bottom:14px">＋ Aggiungi movimento</button>
+    <div class="divider"></div>
+    <div class="section-title">Ricorrenza</div>
+    <div style="margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div id="rec-none"   class="rec-btn active" onclick="setRec('none')">🚫<div>Nessuna</div></div>
+        <div id="rec-weekly" class="rec-btn" onclick="setRec('weekly')">📅<div>Settimanale</div></div>
+        <div id="rec-monthly" class="rec-btn" onclick="setRec('monthly')">🗓<div>Mensile</div></div>
+        <div id="rec-custom" class="rec-btn" onclick="setRec('custom')">⚙️<div>Ogni N giorni</div></div>
+      </div>
+      <!-- Weekly: day of week -->
+      <div id="rec-weekly-opts" style="display:none;margin-top:8px">
+        <label class="field-label">Giorno della settimana</label>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:6px">
+          <div class="day-btn" data-day="1" onclick="toggleDay(1)">L</div>
+          <div class="day-btn" data-day="2" onclick="toggleDay(2)">Ma</div>
+          <div class="day-btn" data-day="3" onclick="toggleDay(3)">Me</div>
+          <div class="day-btn" data-day="4" onclick="toggleDay(4)">G</div>
+          <div class="day-btn" data-day="5" onclick="toggleDay(5)">V</div>
+          <div class="day-btn" data-day="6" onclick="toggleDay(6)">S</div>
+          <div class="day-btn" data-day="0" onclick="toggleDay(0)">D</div>
+        </div>
+      </div>
+      <!-- Monthly: day of month -->
+      <div id="rec-monthly-opts" style="display:none;margin-top:8px">
+        <label class="field-label">Giorno del mese</label>
+        <input type="number" id="rec-monthly-day" min="1" max="31" placeholder="es. 10" style="margin-top:6px"/>
+        <div style="font-size:11px;color:#4a5068;margin-top:4px">L'app ti avviserà con un badge nella schermata Regole</div>
+      </div>
+      <!-- Custom: every N days -->
+      <div id="rec-custom-opts" style="display:none;margin-top:8px">
+        <label class="field-label">Ogni quanti giorni</label>
+        <input type="number" id="rec-custom-days" min="1" placeholder="es. 14" style="margin-top:6px"/>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeRegolaModal()">Annulla</button>
       <button class="btn-primary" onclick="saveRegola()">Salva regola</button>
@@ -729,8 +776,21 @@ function setPickerValue(type,val){
   const lbl=document.getElementById(id+'-label');
   lbl.textContent=val;lbl.dataset.value=val;lbl.classList.remove('picker-trigger-placeholder');
   document.getElementById(id).classList.add('filled');
-  // Also add to pickerItems if new
   if(!pickerItems.includes(val))pickerItems.push(val);
+  // Se portafoglio = Debiti/Crediti: abilita split automaticamente, rendi importo opzionale
+  if(type==='portafoglio'){
+    const isDC=val==='Debiti/Crediti';
+    const importoHint=document.querySelector('#mov-importo')?.parentElement?.nextElementSibling;
+    if(isDC){
+      setSplit(true);
+      // Cambia hint importo
+      const hint=document.getElementById('importo-hint');
+      if(hint)hint.textContent='Opzionale per Debiti/Crediti — compila solo la quota split';
+    } else {
+      const hint=document.getElementById('importo-hint');
+      if(hint)hint.textContent='Usa il bottone − / + per scegliere il segno';
+    }
+  }
 }
 async function pickerAddNew(){
   const q=document.getElementById('picker-search').value.trim();
@@ -741,9 +801,10 @@ async function pickerAddNew(){
 function closePicker(){document.getElementById('picker-overlay').classList.remove('show');pickerType=null;}
 
 // ── MODAL MOVIMENTO ────────────────────────────────────────────────────────
-let movSegno=-1; // -1 = spesa, +1 = entrata
+let movSegno=-1;    // importo principale
+let splitSegno=1;  // split quota: +1 = ti rimborsa, -1 = paghi tu
 function openMovModal(prefill){
-  S.editingMov=null;movSegno=-1;
+  S.editingMov=null;movSegno=-1;splitSegno=1;
   document.getElementById('mov-modal-title').textContent='Nuovo Movimento';
   document.getElementById('mov-delete-btn').style.display='none';
   document.getElementById('mov-dup-btn').style.display='none';
@@ -757,7 +818,7 @@ function openMovModal(prefill){
   document.getElementById('mov-descrizione').value='';
   document.getElementById('mov-importo').value='';
   document.getElementById('mov-split').value='';
-  setSplit(false);updateSegnoBtn();
+  setSplit(false);updateSegnoBtn();updateSplitSegnoBtn();
   if(prefill){
     if(prefill.portafoglio)setPickerValue('portafoglio',prefill.portafoglio);
     if(prefill.categoria)setPickerValue('categoria',prefill.categoria);
@@ -770,7 +831,7 @@ function openMovModal(prefill){
 }
 function editMov(id){
   const m=S.movimenti.find(x=>x.id===id);if(!m)return;
-  S.editingMov=id;movSegno=m.importo!=null&&m.importo>=0?1:-1;
+  S.editingMov=id;movSegno=m.importo!=null&&m.importo>=0?1:-1;splitSegno=m.split!=null&&m.split>=0?1:-1;
   document.getElementById('mov-modal-title').textContent='Modifica';
   document.getElementById('mov-delete-btn').style.display='block';
   document.getElementById('mov-dup-btn').style.display='block';
@@ -787,6 +848,7 @@ function editMov(id){
   document.getElementById('mov-importo').value=abs!==''?String(abs).replace('.',','):'';
   updateSegnoBtn();
   if(m.conchi){setSplit(true);setPickerValue('conchi',m.conchi);}else setSplit(false);
+  updateSplitSegnoBtn();
   document.getElementById('mov-split').value=m.split!=null?String(m.split).replace('.',','):'';
   document.getElementById('mov-modal').classList.add('show');
 }
@@ -797,8 +859,40 @@ function updateSegnoBtn(){
   if(movSegno>0){btn.textContent='＋';btn.style.background='rgba(16,185,129,0.15)';btn.style.color='#86efac';btn.style.borderColor='rgba(16,185,129,0.3)';}
   else{btn.textContent='−';btn.style.background='rgba(239,68,68,0.15)';btn.style.color='#fca5a5';btn.style.borderColor='rgba(239,68,68,0.3)';}
 }
+function toggleSplitSegno(){splitSegno*=-1;updateSplitSegnoBtn();}
+function updateSplitSegnoBtn(){
+  const btn=document.getElementById('split-segno-btn');
+  if(!btn)return;
+  if(splitSegno>0){btn.textContent='＋';btn.style.background='rgba(16,185,129,0.15)';btn.style.color='#86efac';btn.style.borderColor='rgba(16,185,129,0.3)';}
+  else{btn.textContent='−';btn.style.background='rgba(239,68,68,0.15)';btn.style.color='#fca5a5';btn.style.borderColor='rgba(239,68,68,0.3)';}
+}
 function toggleSplit(){setSplit(!document.getElementById('split-toggle-el').classList.contains('on'));}
-function setSplit(on){document.getElementById('split-toggle-el').classList.toggle('on',on);document.getElementById('split-fields').classList.toggle('show',on);}
+function setSplit(on){
+  document.getElementById('split-toggle-el').classList.toggle('on',on);
+  document.getElementById('split-fields').classList.toggle('show',on);
+  if(on){
+    // Reset auto-suggest flag and suggest half if importo already filled
+    const sf=document.getElementById('mov-split');
+    if(!sf.value)sf._autoSuggested=true;
+    autoSuggestHalf();
+  }
+}
+function autoSuggestHalf(){
+  const splitOn=document.getElementById('split-toggle-el').classList.contains('on');
+  if(!splitOn)return;
+  // Non suggerire metà per Debiti/Crediti (importo libero)
+  const port=document.getElementById('trigger-portafoglio-label').dataset.value||'';
+  if(port==='Debiti/Crediti')return;
+  const abs=parseNum(document.getElementById('mov-importo').value);
+  if(abs===null)return;
+  const half=Math.round(Math.abs(abs)/2*100)/100;
+  const splitField=document.getElementById('mov-split');
+  if(splitField._autoSuggested||splitField.value===''){
+    splitField.value=String(half).replace('.',',');
+    splitField._autoSuggested=true;
+  }
+}
+
 async function saveMov(){
   const data=document.getElementById('mov-data').value;
   const portafoglio=document.getElementById('trigger-portafoglio-label').dataset.value||'';
@@ -811,9 +905,13 @@ async function saveMov(){
   const split=splitOn?parseNum(document.getElementById('mov-split').value):null;
   if(!data)return toast('Data obbligatoria','error');
   if(!portafoglio)return toast('Scegli portafoglio','error');
-  if(importo===null&&split===null)return toast('Inserisci importo','error');
+  // Per Debiti/Crediti l'importo principale è opzionale
+  if(importo===null&&split===null&&portafoglio!=='Debiti/Crediti')return toast('Inserisci importo','error');
+  if(importo===null&&split===null&&portafoglio==='Debiti/Crediti')return toast('Inserisci almeno la quota split','error');
   if(splitOn&&!conchi)return toast('Indica con chi','error');
-  const obj={data,portafoglio,descrizione,categoria,importo,split,conchi:conchi||'',tipoOverride:null};
+  // Applica segno split
+  const splitFinal=split!=null?Math.abs(split)*splitSegno:null;
+  const obj={data,portafoglio,descrizione,categoria,importo,split:splitFinal,conchi:conchi||'',tipoOverride:null};
   if(S.editingMov!==null)obj.id=S.editingMov;
   const newId=await put('movimenti',obj);if(S.editingMov===null)obj.id=newId;
   S.movimenti=await getAll('movimenti');
@@ -837,7 +935,8 @@ function duplicateMov(){
 }
 
 // ── REGOLE ─────────────────────────────────────────────────────────────────
-let regSteps=[]; // [{portafoglio, descrizione, categoria, formula, segno}]
+let regSteps=[];
+let regRec={type:'none', days:[], monthDay:null, everyNDays:null}; // recurrence config
 // formula: 'base' = usa importo base, 'neg_base' = -importo base, numero fisso, o stringa 'COMMISSIONI'
 const FORMULA_OPTIONS=[
   {val:'neg_base',lbl:'− Importo base (uscita)'},
@@ -848,9 +947,25 @@ const FORMULA_OPTIONS=[
 function renderRegole(){
   const list=document.getElementById('regole-list');
   if(!S.regole.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">⚡</div>Nessuna regola ancora.<br>Creane una con il bottone +</div>';return;}
-  list.innerHTML=S.regole.map(r=>`
-    <div class="regola-card">
-      <div class="regola-nome">${r.icona||'⚡'} ${esc(r.nome)}</div>
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  list.innerHTML=S.regole.map(r=>{
+    const rec=r.recurrence||{type:'none'};
+    let recBadge='';
+    let isDue=false;
+    if(rec.type==='weekly'&&rec.days&&rec.days.length){
+      const dayNames=['D','L','Ma','Me','G','V','S'];
+      const names=rec.days.map(d=>dayNames[d]).join(', ');
+      recBadge=`<span style="background:rgba(139,92,246,0.15);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">📅 Ogni ${names}</span>`;
+      isDue=rec.days.includes(oggi.getDay());
+    } else if(rec.type==='monthly'&&rec.monthDay){
+      recBadge=`<span style="background:rgba(139,92,246,0.15);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">🗓 Ogni ${rec.monthDay} del mese</span>`;
+      isDue=oggi.getDate()===rec.monthDay;
+    } else if(rec.type==='custom'&&rec.everyNDays){
+      recBadge=`<span style="background:rgba(139,92,246,0.15);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚙️ Ogni ${rec.everyNDays} giorni</span>`;
+    }
+    const dueBadge=isDue?`<span style="background:rgba(245,158,11,0.2);color:#f59e0b;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px;animation:pulse 1.5s infinite">● OGGI</span>`:'';
+    return`<div class="regola-card" style="${isDue?'border-color:rgba(245,158,11,0.4)':''}">
+      <div class="regola-nome">${r.icona||'⚡'} ${esc(r.nome)}${recBadge}${dueBadge}</div>
       ${r.steps.map(s=>`<div class="regola-step">
         <span class="regola-badge">${s.segno==='neg'?'−':'+'}${s.formula==='custom'?fmtEur(s.customImporto):'base'}</span>
         <span>${esc(s.portafoglio)} — ${esc(s.descrizione||s.categoria||'')}</span>
@@ -859,16 +974,19 @@ function renderRegole(){
         <button class="btn-accent" style="flex:1" onclick="openEseguiModal(${r.id})">⚡ Esegui</button>
         <button class="btn-small" onclick="openRegolaModal(${r.id})">✏️ Modifica</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function openRegolaModal(id){
   S.editingReg=id||null;regSteps=[];
+  regRec={type:'none',days:[],monthDay:null,everyNDays:null};
   if(id){
     const r=S.regole.find(x=>x.id===id);if(!r)return;
     document.getElementById('reg-nome').value=r.nome;
     document.getElementById('reg-icona').value=r.icona||'⚡';
     regSteps=JSON.parse(JSON.stringify(r.steps));
+    if(r.recurrence)regRec=JSON.parse(JSON.stringify(r.recurrence));
     document.getElementById('reg-delete-btn').style.display='block';
     document.getElementById('regola-modal-title').textContent='Modifica Regola';
   } else {
@@ -877,9 +995,45 @@ function openRegolaModal(id){
     document.getElementById('regola-modal-title').textContent='Nuova Regola';
   }
   renderRegSteps();
+  // Reset rec UI then load
+  setTimeout(()=>loadRecUI(regRec),50);
   document.getElementById('regola-modal').classList.add('show');
 }
 function closeRegolaModal(){document.getElementById('regola-modal').classList.remove('show');}
+
+function setRec(type){
+  regRec.type=type;
+  document.querySelectorAll('.rec-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('rec-'+type).classList.add('active');
+  document.getElementById('rec-weekly-opts').style.display=type==='weekly'?'block':'none';
+  document.getElementById('rec-monthly-opts').style.display=type==='monthly'?'block':'none';
+  document.getElementById('rec-custom-opts').style.display=type==='custom'?'block':'none';
+}
+function toggleDay(d){
+  const idx=regRec.days.indexOf(d);
+  if(idx>=0)regRec.days.splice(idx,1);else regRec.days.push(d);
+  document.querySelectorAll('.day-btn').forEach(b=>{
+    b.classList.toggle('active',regRec.days.includes(parseInt(b.dataset.day)));
+  });
+}
+function loadRecUI(rec){
+  if(!rec||rec.type==='none'){setRec('none');return;}
+  setRec(rec.type);
+  if(rec.type==='weekly'){
+    regRec.days=rec.days||[];
+    document.querySelectorAll('.day-btn').forEach(b=>{
+      b.classList.toggle('active',regRec.days.includes(parseInt(b.dataset.day)));
+    });
+  }
+  if(rec.type==='monthly'){
+    regRec.monthDay=rec.monthDay||null;
+    if(rec.monthDay)document.getElementById('rec-monthly-day').value=rec.monthDay;
+  }
+  if(rec.type==='custom'){
+    regRec.everyNDays=rec.everyNDays||null;
+    if(rec.everyNDays)document.getElementById('rec-custom-days').value=rec.everyNDays;
+  }
+}
 
 function renderRegSteps(){
   const lists=getLists();
@@ -939,7 +1093,23 @@ async function saveRegola(){
   if(!nome)return toast('Inserisci un nome','error');
   if(!regSteps.length)return toast('Aggiungi almeno un movimento','error');
   if(regSteps.some(s=>!s.portafoglio))return toast('Scegli il portafoglio per ogni movimento','error');
-  const obj={nome,icona,steps:JSON.parse(JSON.stringify(regSteps))};
+  // Build recurrence object
+  let rec={type:regRec.type};
+  if(rec.type==='weekly'){
+    if(!regRec.days.length)return toast('Scegli almeno un giorno della settimana','error');
+    rec.days=regRec.days;
+  }
+  if(rec.type==='monthly'){
+    const md=parseInt(document.getElementById('rec-monthly-day').value);
+    if(!md||md<1||md>31)return toast('Inserisci un giorno valido (1-31)','error');
+    rec.monthDay=md;
+  }
+  if(rec.type==='custom'){
+    const nd=parseInt(document.getElementById('rec-custom-days').value);
+    if(!nd||nd<1)return toast('Inserisci ogni quanti giorni','error');
+    rec.everyNDays=nd;
+  }
+  const obj={nome,icona,steps:JSON.parse(JSON.stringify(regSteps)),recurrence:rec};
   if(S.editingReg)obj.id=S.editingReg;
   await put('regole',obj);S.regole=await getAll('regole');
   closeRegolaModal();toast('✓ Regola salvata');renderRegole();
