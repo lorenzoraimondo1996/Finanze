@@ -84,11 +84,18 @@ select option { background: #111827; }
 .filter-chip { flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 700; color: #8a8fa8; cursor: pointer; white-space: nowrap; }
 .filter-chip.active { background: rgba(245,158,11,0.12); border-color: #f59e0b; color: #f59e0b; }
 
-.conto-card { background: #111827; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 14px 14px 14px 18px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; overflow: hidden; position: relative; }
-.conto-card::before { content: ‘’; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(–port-color, #f59e0b); border-radius: 2px 0 0 2px; }
-.conto-name { color: #f0ede8; font-weight: 700; font-size: 15px; }
-.conto-sub { font-size: 10px; color: #4a5068; margin-top: 2px; letter-spacing: 1px; text-transform: uppercase; }
-.conto-saldo { font-weight: 900; font-size: 18px; }
+.conto-card { border-radius: 14px; padding: 18px 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; background: var(–port-bg, #1a2235); border: 1px solid var(–port-border, rgba(255,255,255,0.1)); position: relative; overflow: hidden; }
+.conto-card::after { content: ‘’; position: absolute; top: -30px; right: -20px; width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.06); pointer-events: none; }
+.conto-name { color: #fff; font-weight: 800; font-size: 15px; letter-spacing: 0.3px; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+.conto-sub { font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 2px; letter-spacing: 1px; text-transform: uppercase; }
+.conto-saldo { font-weight: 900; font-size: 22px; text-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+.conto-icon { font-size: 28px; margin-bottom: 6px; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.conto-card-left { display: flex; flex-direction: column; }
+.patrimonio-card { background: linear-gradient(135deg, #1a1f35, #2a1f3e); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 20px; margin-bottom: 12px; position: relative; overflow: hidden; }
+.patrimonio-card::before { content: ‘’; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #f59e0b, transparent); }
+.patrimonio-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #8a8fa8; margin-bottom: 8px; }
+.patrimonio-value { font-size: 36px; font-weight: 900; color: #f59e0b; }
+.patrimonio-sub { font-size: 12px; color: #4a5068; margin-top: 4px; }
 
 .persona-card { background: #111827; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 16px; margin-bottom: 8px; }
 .persona-row { display: flex; justify-content: space-between; align-items: center; }
@@ -220,24 +227,25 @@ select option { background: #111827; }
     </div>
   </div>
   <div class="page-content">
+    <span id="kpi-patrimonio" style="display:none"></span>
     <div class="kpi-grid">
-      <div class="kpi-card" style="--accent:#f59e0b">
-        <div class="kpi-label">Patrimonio totale</div>
-        <div class="kpi-value" id="kpi-patrimonio">—</div>
-      </div>
       <div class="kpi-card" style="--accent:#10b981">
-        <div class="kpi-label">Entrate 2026</div>
+        <div class="kpi-label" id="kpi-entrate-label">Entrate anno</div>
         <div class="kpi-value pos" id="kpi-entrate">—</div>
+      </div>
+      <div class="kpi-card" style="--accent:#ef4444">
+        <div class="kpi-label" id="kpi-uscite-label">Uscite anno</div>
+        <div class="kpi-value neg" id="kpi-uscite">—</div>
       </div>
     </div>
     <div class="kpi-grid">
-      <div class="kpi-card" style="--accent:#ef4444">
-        <div class="kpi-label">Uscite 2026</div>
-        <div class="kpi-value neg" id="kpi-uscite">—</div>
-      </div>
       <div class="kpi-card" style="--accent:#fbbf24">
         <div class="kpi-label">Flusso netto</div>
         <div class="kpi-value" id="kpi-flusso">—</div>
+      </div>
+      <div class="kpi-card" style="--accent:#f59e0b">
+        <div class="kpi-label">Totale movimenti</div>
+        <div class="kpi-value" id="kpi-nmov" style="color:#f59e0b">—</div>
       </div>
     </div>
     <div class="section">
@@ -736,17 +744,30 @@ function escapeHTML(s) {
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTI
 // ═══════════════════════════════════════════════════════════════════════════
-// Colori portafogli (come richiesto)
+// Colori portafogli
 const PORT_COLORS = {
-  'Satispay':       '#ef4444',   // rosso
-  'Credifriuli':    '#67c5e8',   // azzurro chiaro
-  'Revolut':        '#8b5cf6',   // violetto
-  'Intesa':         '#86efac',   // verde chiaro
-  'Cash':           '#16a34a',   // verde scuro
-  'Debiti/Crediti': '#94a3b8',   // grigio chiaro
-  'Amex Gold':      '#f59e0b',   // oro
-  'Blu Amex':       '#1e40af',   // blu scuro
+  'Satispay':       '#ef4444',
+  'Credifriuli':    '#67c5e8',
+  'Revolut':        '#8b5cf6',
+  'Intesa':         '#86efac',
+  'Cash':           '#16a34a',
+  'Debiti/Crediti': '#94a3b8',
+  'Amex Gold':      '#f59e0b',
+  'Blu Amex':       '#1e40af',
 };
+
+// Stili completi card per ogni portafoglio
+const PORT_META = {
+  'Satispay':       { bg:'linear-gradient(135deg,#7f1d1d,#991b1b)', border:'rgba(239,68,68,0.4)',   saldoColor:'#fca5a5', icon:'🔴' },
+  'Credifriuli':    { bg:'linear-gradient(135deg,#0c3a52,#0e4d6e)', border:'rgba(103,197,232,0.4)', saldoColor:'#93e4f8', icon:'🏦' },
+  'Revolut':        { bg:'linear-gradient(135deg,#2e1065,#3b0764)', border:'rgba(139,92,246,0.4)',  saldoColor:'#c4b5fd', icon:'💜' },
+  'Intesa':         { bg:'linear-gradient(135deg,#052e16,#14532d)', border:'rgba(134,239,172,0.4)', saldoColor:'#86efac', icon:'🟢' },
+  'Cash':           { bg:'linear-gradient(135deg,#14532d,#166534)', border:'rgba(22,163,74,0.5)',   saldoColor:'#4ade80', icon:'💵' },
+  'Debiti/Crediti': { bg:'linear-gradient(135deg,#1e293b,#334155)', border:'rgba(148,163,184,0.3)', saldoColor:'#cbd5e1', icon:'👥' },
+  'Amex Gold':      { bg:'linear-gradient(135deg,#422006,#713f12)', border:'rgba(245,158,11,0.5)',  saldoColor:'#fcd34d', icon:'✨' },
+  'Blu Amex':       { bg:'linear-gradient(135deg,#1e1b4b,#1e3a8a)', border:'rgba(30,64,175,0.5)',   saldoColor:'#93c5fd', icon:'💙' },
+};
+
 function portColor(name) {
   return PORT_COLORS[name] || '#8a8fa8';
 }
@@ -783,6 +804,13 @@ function renderConti() {
   document.getElementById('kpi-patrimonio').textContent = fmtEurShort(patrimonio);
   document.getElementById('kpi-entrate').textContent = fmtEurShort(entrate2026);
   document.getElementById('kpi-uscite').textContent = fmtEurShort(uscite2026);
+  const nmovEl = document.getElementById('kpi-nmov');
+  if (nmovEl) nmovEl.textContent = state.movimenti.length.toLocaleString('it-IT');
+  const anno = new Date().getFullYear();
+  const elEl = document.getElementById('kpi-entrate-label');
+  const ulEl = document.getElementById('kpi-uscite-label');
+  if (elEl) elEl.textContent = 'Entrate ' + anno;
+  if (ulEl) ulEl.textContent = 'Uscite ' + anno;
   const flusso = entrate2026 + uscite2026;
   const flussoEl = document.getElementById('kpi-flusso');
   flussoEl.textContent = fmtEurShort(flusso);
@@ -798,17 +826,38 @@ function renderConti() {
     return;
   }
 
-  const html = listaOrdinata.map(p => {
+  // Patrimonio card in cima
+  const prestitoAle = (() => {
+    let tot = 0;
+    for (const m of state.movimenti) {
+      if (m.conchi === 'Prestito Ale' && m.split !== null && m.split !== undefined) tot += m.split;
+    }
+    return tot;
+  })();
+  const patrimonioLordo = patrimonio;
+  const patrimonioNetto = patrimonio - prestitoAle;
+
+  let html = `<div class="patrimonio-card">
+    <div class="patrimonio-label">Patrimonio netto</div>
+    <div class="patrimonio-value">${fmtEur(patrimonioNetto)}</div>
+    <div class="patrimonio-sub">lordo ${fmtEur(patrimonioLordo)}  ·  prestito Ale escluso</div>
+  </div>`;
+
+  html += '<div class="section-title" style="margin-top:18px">Portafogli</div>';
+
+  html += listaOrdinata.map(p => {
     const saldo = saldiPort[p] || 0;
-    const pc = portColor(p);
-    const saldoColor = saldo < -0.01 ? '#ef4444' : '#f0ede8';
-    return `<div class="conto-card" style="--port-color:${pc}">
-      <div>
+    const meta = PORT_META[p] || { bg: '#1a2235', border: 'rgba(255,255,255,0.1)', saldoColor: '#f0ede8', icon: '💳' };
+    const saldoColor = saldo < -0.01 ? 'rgba(255,150,150,0.95)' : meta.saldoColor;
+    return `<div class="conto-card" style="--port-bg:${meta.bg};--port-border:${meta.border}">
+      <div class="conto-card-left">
+        <span class="conto-icon">${meta.icon}</span>
         <div class="conto-name">${p}</div>
       </div>
       <div class="conto-saldo" style="color:${saldoColor}">${fmtEur(saldo)}</div>
     </div>`;
   }).join('');
+
   document.getElementById('conti-list').innerHTML = html;
 }
 
