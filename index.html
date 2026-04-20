@@ -446,6 +446,26 @@ select option{background:#111827}
   </div>
 </div>
 
+<!-- MODAL ARRETRATI -->
+
+<div class="modal-overlay" id="arretrati-modal" onclick="if(event.target===this)closeArretratiModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="arretrati-title">⏰ Occorrenze saltate</div>
+    <div id="arretrati-intro" style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#f0ede8;line-height:1.6"></div>
+    <div id="arretrati-list"></div>
+    <div class="modal-row" id="arretrati-importo-wrap">
+      <label class="field-label">Importo base (uguale per tutte)</label>
+      <input type="text" inputmode="decimal" id="arretrati-importo" placeholder="es. 200"/>
+      <div style="font-size:11px;color:#4a5068;margin-top:4px">Lascia vuoto se vuoi importi diversi per ogni data</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeArretratiModal()">Ignora</button>
+      <button class="btn-primary" onclick="eseguiArretrati()">✓ Crea tutti</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL BACKUP -->
 
 <div class="modal-overlay" id="backup-modal" onclick="if(event.target===this)closeBackup()">
@@ -564,6 +584,8 @@ async function loadAndShow(){
   const el=document.getElementById('menu-username');
   if(el&&ucfg&&ucfg.value)el.textContent='Ciao, '+ucfg.value+' 👋';
   showScreen('movimenti');
+  // Check for missed recurring rules after a short delay
+  setTimeout(()=>checkArretrati(),800);
 }
 async function importSeedData(){
   toast('Importazione in corso...');
@@ -584,7 +606,7 @@ function showScreen(name){
     if(name==='movimenti')renderMovimenti();
     if(name==='conti')renderConti();
     if(name==='crediti')renderCrediti();
-    if(name==='regole')renderRegole();
+    if(name==='regole'){renderRegole();setTimeout(()=>checkArretrati(),400);}
   }
 }
 function openMenu(){document.getElementById('side-overlay').classList.add('show');document.getElementById('side-menu').classList.add('open');}
@@ -1136,23 +1158,124 @@ function openEseguiModal(id){
   document.getElementById('esegui-modal').classList.add('show');
 }
 function closeEseguiModal(){document.getElementById('esegui-modal').classList.remove('show');eseguiRegolaId=null;}
+function closeArretratiModal(){document.getElementById('arretrati-modal').classList.remove('show');}
 
-async function eseguiRegola(){
-  const r=S.regole.find(x=>x.id===eseguiRegolaId);if(!r)return;
-  const dataVal=document.getElementById('esegui-data').value;
-  const baseAbs=parseNum(document.getElementById('esegui-importo').value);
-  if(!dataVal)return toast('Inserisci la data','error');
-  if(baseAbs===null)return toast('Inserisci l\'importo base','error');
-  const base=Math.abs(baseAbs);
+// Compute all missed occurrences between lastRun and today
+function computeOccorrenze(rec, lastRunISO, oggi){
+  const dates=[];
+  if(!rec||rec.type==='none')return dates;
+  const start=lastRunISO?new Date(lastRunISO+'T00:00:00'):null;
+  // Iterate from day after lastRun (or 30 days ago if never run) up to yesterday
+  const from=start?new Date(start):new Date(oggi);
+  if(!start) from.setDate(from.getDate()-60); // look back 60 days max if never run
+  else from.setDate(from.getDate()+1); // day after last run
+  const to=new Date(oggi); to.setDate(to.getDate()-1); // up to yesterday
+  if(from>to)return dates;
+  const cur=new Date(from);
+  let safetyCount=0;
+  while(cur<=to&&safetyCount<365){
+    safetyCount++;
+    const iso=fmtISO(cur);
+    if(rec.type==='weekly'&&rec.days&&rec.days.includes(cur.getDay()))dates.push(iso);
+    else if(rec.type==='monthly'&&rec.monthDay&&cur.getDate()===rec.monthDay)dates.push(iso);
+    else if(rec.type==='custom'&&rec.everyNDays){
+      if(start){
+        const diff=Math.round((cur-start)/(1000*60*60*24));
+        if(diff>0&&diff%rec.everyNDays===0)dates.push(iso);
+      } else {
+        // Never run: just add today as first occurrence
+        dates.push(iso);break;
+      }
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  return dates;
+}
+
+let arretratiRegolaId=null, arretratiDate=[];
+async function checkArretrati(){
+  // Check all regole for missed occurrences — called on app load and when switching to regole tab
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  const oggiISO=fmtISO(oggi);
+  for(const r of S.regole){
+    const rec=r.recurrence||{type:'none'};
+    if(rec.type==='none')continue;
+    const lastRun=await getLastRun(r.id);
+    const missed=computeOccorrenze(rec,lastRun,oggi);
+    if(missed.length>0){
+      // Show arretrati modal for first regola with missed occurrences
+      showArretratiModal(r,missed);
+      return; // One at a time
+    }
+  }
+}
+
+function showArretratiModal(r, dates){
+  arretratiRegolaId=r.id; arretratiDate=dates;
+  document.getElementById('arretrati-title').textContent=(r.icona||'⚡')+' '+r.nome;
+  const rec=r.recurrence||{};
+  let freqLabel='';
+  if(rec.type==='weekly'){const dn=['D','L','Ma','Me','G','V','S'];freqLabel='ogni '+rec.days.map(d=>dn[d]).join(', ');}
+  else if(rec.type==='monthly')freqLabel='ogni '+rec.monthDay+' del mese';
+  else if(rec.type==='custom')freqLabel='ogni '+rec.everyNDays+' giorni';
+  const plu=dates.length===1;
+  document.getElementById('arretrati-intro').innerHTML=
+    'Hai <b style="color:#f59e0b">'+dates.length+' occorrenz'+(plu?'a':'e')+' saltata'+(plu?'':'e')+'</b> per la regola <b style="color:#f59e0b">&ldquo;'+esc(r.nome)+'&rdquo;</b> ('+freqLabel+').<br>Vuoi creare i movimenti arretrati?';
+  // List dates
+  document.getElementById('arretrati-list').innerHTML=
+    `<div style="max-height:160px;overflow-y:auto;margin-bottom:14px">`+
+    dates.map(d=>`<div style="padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;font-size:13px">
+      <span style="color:#f0ede8">${fmtIT(d)}</span>
+      <span style="color:#4a5068;font-size:11px">${fmtDay(d)}</span>
+    </div>`).join('')+`</div>`;
+  document.getElementById('arretrati-importo').value='';
+  document.getElementById('arretrati-modal').classList.add('show');
+}
+
+async function eseguiArretrati(){
+  const r=S.regole.find(x=>x.id===arretratiRegolaId);if(!r)return;
+  const baseAbs=parseNum(document.getElementById('arretrati-importo').value);
+  if(baseAbs===null&&r.steps.some(s=>s.formula==='base'))
+    return toast("Inserisci l'importo base",'error');
+  const base=baseAbs?Math.abs(baseAbs):0;
+  let totMov=0;
+  for(const d of arretratiDate){
+    await creaMovimentiRegola(r,d,base);
+    totMov+=r.steps.length;
+  }
+  // Save last run as most recent date
+  const lastDate=arretratiDate[arretratiDate.length-1];
+  await saveLastRun(r.id,lastDate);
+  S.movimenti=await getAll('movimenti');
+  closeArretratiModal();
+  toast(`✓ ${totMov} movimenti creati per ${arretratiDate.length} date`);
+  // Check if there are more regole with arretrati
+  setTimeout(()=>checkArretrati(),300);
+  renderMovimenti();
+}
+
+async function creaMovimentiRegola(r,dataVal,base){
   const nuovi=r.steps.map(s=>{
     const imp=s.formula==='custom'?s.customImporto:base;
     const impFin=s.segno==='neg'?-Math.abs(imp):Math.abs(imp);
     return{data:dataVal,portafoglio:s.portafoglio,descrizione:s.descrizione||r.nome,categoria:s.categoria||'',importo:impFin,split:null,conchi:'',tipoOverride:null};
   });
   for(const m of nuovi)await put('movimenti',m);
+}
+async function saveLastRun(regolaId,dataISO){await put('config',{key:'lastrun_'+regolaId,value:dataISO});}
+async function getLastRun(regolaId){const cfg=await getOne('config','lastrun_'+regolaId);return cfg?cfg.value:null;}
+
+async function eseguiRegola(){
+  const r=S.regole.find(x=>x.id===eseguiRegolaId);if(!r)return;
+  const dataVal=document.getElementById('esegui-data').value;
+  const baseAbs=parseNum(document.getElementById('esegui-importo').value);
+  if(!dataVal)return toast('Inserisci la data','error');
+  if(baseAbs===null)return toast("Inserisci l'importo base",'error');
+  await creaMovimentiRegola(r,dataVal,Math.abs(baseAbs));
+  await saveLastRun(r.id,dataVal);
   S.movimenti=await getAll('movimenti');
   closeEseguiModal();
-  toast(`✓ ${nuovi.length} movimenti creati`);
+  toast('✓ Movimenti creati');
   switchTab('movimenti');
 }
 
