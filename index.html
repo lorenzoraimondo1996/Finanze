@@ -594,25 +594,33 @@ function renderMovimenti(){
 function setFilter(kind,val){if(kind==='anno')state.filterAnno=val;else state.filterCat=val;renderMovimenti();}
 
 // ── CONTI ──────────────────────────────────────────────────────────────────
-function calcSaldi(inclPrestito){
-  // inclPrestito: se true include Prestito Ale nel patrimonio netto
+function calcSaldi(){
+  // Replica ESATTA della logica Excel:
+  // - Ogni portafoglio reale (Intesa, Credifriuli, ecc.) = SUMIFS(Importo, Portafoglio, nome)
+  // - Debiti/Crediti = SUMIF(ConChi, "<>Prestito Ale", Split)
+  // - Prestito Ale = SUMIF(ConChi, "Prestito Ale", Split)  [separato, escludibile]
+  // - Patrimonio lordo = somma tutti e 8 i conti
+  // - Patrimonio netto = patrimonio lordo + prestito Ale (che è negativo, quindi lo escludiamo)
+
   const saldiPort={};
-  let ent=0,usc=0,prestitoAleSplit=0;
+  let ent=0, usc=0, creditiDebiti=0, prestitoAle=0;
   const anno=new Date().getFullYear().toString();
-  const escPrestito=!inclPrestito; // default: escludi Prestito Ale
 
   for(const m of state.movimenti){
-    const p=m.portafoglio;if(!p)continue;
+    const p=m.portafoglio; if(!p) continue;
 
-    // Saldi reali: solo portafogli veri (non Debiti/Crediti che è virtuale)
-    if(p!=='Debiti/Crediti'){
-      if(m.importo!=null)saldiPort[p]=(saldiPort[p]||0)+m.importo;
+    // Tutti i portafogli: somma importo colonna E (anche Debiti/Crediti ma lì è sempre 0)
+    if(p!=='Debiti/Crediti' && m.importo!=null){
+      saldiPort[p]=(saldiPort[p]||0)+m.importo;
     }
 
-    // Prestito Ale: somma degli split con conchi='Prestito Ale'
-    if(m.conchi==='Prestito Ale'&&m.split!=null)prestitoAleSplit+=m.split;
+    // Split colonna F: Prestito Ale separato, altri vanno in Debiti/Crediti
+    if(m.conchi && m.split!=null){
+      if(m.conchi==='Prestito Ale') prestitoAle+=m.split;
+      else creditiDebiti+=m.split;
+    }
 
-    // Entrate/uscite anno corrente (escludi saldi iniziali)
+    // Entrate/uscite anno corrente
     if(m.data.startsWith(anno)&&m.categoria!=='Saldo Iniziale'){
       const n=computeNetto(m.importo,m.split);
       const t=computeTipo(n,m.tipoOverride);
@@ -620,24 +628,30 @@ function calcSaldi(inclPrestito){
     }
   }
 
-  // Debiti/Crediti = somma split escludendo Prestito Ale (sempre positiva = credito)
-  let creditiTot=0;
-  for(const m of state.movimenti){
-    if(m.conchi&&m.conchi!=='Prestito Ale'&&m.split!=null)creditiTot+=m.split;
-  }
+  // Patrimonio LORDO = saldi reali + Debiti/Crediti (come Excel: 24000.57)
+  const sommaConti=Object.values(saldiPort).reduce((a,b)=>a+b,0);
+  const patrimLordo=sommaConti+creditiDebiti; // = 24000.57
 
-  const patrimLordo=Object.values(saldiPort).reduce((a,b)=>a+b,0);
-  // netto: se escludiamo Prestito Ale, sottraiamo il suo split (che è negativo, quindi aggiungiamo abs)
-  const patrimNetto=inclPrestito?patrimLordo:patrimLordo-prestitoAleSplit;
+  // Patrimonio NETTO = lordo + prestito Ale (prestito Ale è negativo -18500)
+  const patrimNetto=patrimLordo+prestitoAle; // = 24000.57 + (-18500) = 5500.57
 
-  return {saldiPort,ent,usc,patrimLordo,patrimNetto,prestitoAleSplit,creditiTot};
+  return {saldiPort, ent, usc, patrimLordo, patrimNetto, prestitoAle, creditiDebiti};
 }
 
 function renderConti(){
   const inclPrestito=state.inclPrestito||false;
-  const {saldiPort,ent,usc,patrimLordo,patrimNetto,prestitoAleSplit,creditiTot}=calcSaldi(inclPrestito);
+  const {saldiPort,ent,usc,patrimLordo,patrimNetto,prestitoAle,creditiDebiti}=calcSaldi();
   const flusso=ent+usc;
   const anno=new Date().getFullYear().toString();
+
+  // Il valore mostrato dipende dal toggle:
+  // OFF (default) = patrimonio LORDO che include Debiti/Crediti = 24000.57 (come Excel)
+  // ON = patrimonio NETTO che esclude anche Prestito Ale = 5500.57
+  const valoreShown=inclPrestito?patrimNetto:patrimLordo;
+  const labelShown=inclPrestito?'Patrimonio netto (Prestito Ale escluso)':'Patrimonio totale';
+  const subShown=inclPrestito
+    ?'Lordo '+fmtEur(patrimLordo)+' · Prestito Ale '+fmtEur(prestitoAle)
+    :'Tocca il toggle per escludere Prestito Ale ('+fmtEur(prestitoAle)+')';
 
   document.getElementById('kpi-entrate').textContent=fmtEurShort(ent);
   document.getElementById('kpi-uscite').textContent=fmtEurShort(usc);
@@ -652,29 +666,34 @@ function renderConti(){
   const altri=Object.keys(saldiPort).filter(k=>!ordine.includes(k)).sort();
   const lista=[...ordine.filter(p=>p in saldiPort),...altri];
 
-  // Toggle Prestito Ale
-  const toggleChecked=inclPrestito?'checked':'';
   let html=`
   <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
     <div>
-      <div style="color:#f0ede8;font-weight:700;font-size:13px">Includi Prestito Ale</div>
-      <div style="color:#4a5068;font-size:11px;margin-top:2px">+€ 18.500 al patrimonio</div>
+      <div style="color:#f0ede8;font-weight:700;font-size:13px">Escludi Prestito Ale</div>
+      <div style="color:#4a5068;font-size:11px;margin-top:2px">mostra patrimonio netto reale</div>
     </div>
-    <div class="toggle ${inclPrestito?'on':''}" onclick="togglePrestito()" id="prestito-toggle"></div>
+    <div class="toggle ${inclPrestito?'on':''}" onclick="togglePrestito()"></div>
   </div>
   <div class="patrimonio-card">
-    <div class="patrimonio-label">${inclPrestito?'Patrimonio lordo (con prestito Ale)':'Patrimonio netto (senza prestito Ale)'}</div>
-    <div class="patrimonio-value">${fmtEur(patrimNetto)}</div>
+    <div class="patrimonio-label">${labelShown}</div>
+    <div class="patrimonio-value">${fmtEur(valoreShown)}</div>
     <div class="patrimonio-row">
-      <div class="patrimonio-sub">
-        ${inclPrestito
-          ? 'Prestito Ale incluso (€ '+Math.abs(prestitoAleSplit).toLocaleString('it-IT',{minimumFractionDigits:2})+')'
-          : 'Lordo: '+fmtEur(patrimLordo)+'  ·  Prestito Ale escluso'
-        }
-      </div>
+      <div class="patrimonio-sub">${subShown}</div>
     </div>
   </div>
-  <div class="section-title" style="margin-top:20px">Portafogli</div>`;
+  <div style="display:flex;gap:10px;margin-bottom:16px">
+    <div style="flex:1;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:12px;text-align:center">
+      <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8fa8;margin-bottom:4px">Crediti/Debiti</div>
+      <div style="font-weight:900;font-size:18px;color:${creditiDebiti>=0?'#86efac':'#fca5a5'}">${fmtEur(creditiDebiti)}</div>
+      <div style="font-size:10px;color:#4a5068;margin-top:2px">escluso Prestito Ale</div>
+    </div>
+    <div style="flex:1;background:rgba(147,197,253,0.06);border:1px solid rgba(30,64,175,0.3);border-radius:12px;padding:12px;text-align:center">
+      <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8fa8;margin-bottom:4px">Prestito Ale</div>
+      <div style="font-weight:900;font-size:18px;color:#93c5fd">${fmtEur(prestitoAle)}</div>
+      <div style="font-size:10px;color:#4a5068;margin-top:2px">fuori conteggio</div>
+    </div>
+  </div>
+  <div class="section-title">Portafogli</div>`;
 
   if(!lista.length){
     html+='<div class="empty-state"><div class="empty-icon">💳</div>Nessun portafoglio.<br>Aggiungi il primo movimento.</div>';
@@ -691,6 +710,16 @@ function renderConti(){
         <div class="conto-saldo" style="color:${sc}">${fmtEur(saldo)}</div>
       </div>`;
     }).join('');
+    // Aggiunge card Debiti/Crediti in fondo alla lista portafogli
+    const dcMeta=portMeta('Debiti/Crediti');
+    const dcColor=creditiDebiti<-0.01?'rgba(255,150,150,0.95)':dcMeta.saldo;
+    html+=`<div class="conto-card" style="--port-bg:${dcMeta.bg};--port-border:${dcMeta.border}">
+      <div class="conto-left">
+        <div class="conto-icon">${dcMeta.icon}</div>
+        <div class="conto-name">Debiti/Crediti</div>
+      </div>
+      <div class="conto-saldo" style="color:${dcColor}">${fmtEur(creditiDebiti)}</div>
+    </div>`;
   }
   document.getElementById('conti-content').innerHTML=html;
 }
