@@ -181,6 +181,21 @@ select option{background:#111827}
 .setup-info{background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:12px 14px;font-size:12px;color:#8a8fa8;line-height:1.6}
 .setup-info b{color:#f59e0b}
 .divider{height:1px;background:rgba(255,255,255,0.06);margin:16px 0}
+.riepilogo-row{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-radius:12px;margin-bottom:7px;cursor:pointer;transition:opacity 0.15s;background:#111827;border:1px solid rgba(255,255,255,0.07)}
+.riepilogo-row:active{opacity:0.75}
+.riepilogo-row.header-row{background:linear-gradient(135deg,#1a1f35,#1e2a3a);border-color:rgba(245,158,11,0.2);cursor:default}
+.riepilogo-row.header-row:active{opacity:1}
+.riepilogo-label{color:#f0ede8;font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.riepilogo-label.muted{color:#8a8fa8;font-weight:600}
+.riepilogo-amount{font-weight:900;font-size:15px;flex-shrink:0;margin-left:10px}
+.riepilogo-count{font-size:10px;color:#4a5068;margin-top:2px}
+.riepilogo-bar-wrap{height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:6px}
+.riepilogo-bar{height:3px;border-radius:2px;background:var(–bar-color,#f59e0b)}
+.riepilogo-total{background:linear-gradient(135deg,#1a1f35,#2a1f3e);border:1px solid rgba(245,158,11,0.3);border-radius:14px;padding:16px;margin-top:12px;display:flex;justify-content:space-between;align-items:center}
+.riepilogo-total-label{color:#8a8fa8;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.riepilogo-total-value{font-weight:900;font-size:22px;color:#f59e0b}
+.mov-detail-row{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:11px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.mov-detail-row:active{background:rgba(245,158,11,0.06)}
 .rec-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;cursor:pointer;color:#8a8fa8;font-size:12px;font-weight:700;transition:all 0.15s}
 .rec-btn div{margin-top:4px;font-size:11px;letter-spacing:0.5px}
 .rec-btn.active{background:rgba(245,158,11,0.12);border-color:#f59e0b;color:#f59e0b}
@@ -206,6 +221,7 @@ select option{background:#111827}
     <div class="nav-item" id="nav-conti" onclick="switchTab('conti')"><span class="nav-icon">💳</span>Conti &amp; Saldi</div>
     <div class="nav-item" id="nav-crediti" onclick="switchTab('crediti')"><span class="nav-icon">👥</span>Crediti / Debiti</div>
     <div class="nav-item" id="nav-regole" onclick="switchTab('regole')"><span class="nav-icon">⚡</span>Regole automatiche</div>
+    <div class="nav-item" id="nav-riepilogo" onclick="switchTab('riepilogo')"><span class="nav-icon">📊</span>Riepilogo Spese</div>
   </nav>
   <div class="side-footer">
     <button class="btn-small" style="flex:1" onclick="showBackup();closeMenu()">💾 Backup</button>
@@ -251,7 +267,11 @@ select option{background:#111827}
   <div class="app-header">
     <div class="hamburger" onclick="openMenu()"><span></span><span></span><span></span></div>
     <div class="app-title">MOVIMENTI</div>
-    <div class="header-actions"><button class="btn-small" onclick="showBackup()">💾</button><button class="btn-small" onclick="lockApp()">🔒</button></div>
+    <div class="header-actions">
+      <button class="btn-small" id="undo-btn" onclick="doUndo()" style="display:none;background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.3);color:#fca5a5">↩</button>
+      <button class="btn-small" onclick="showBackup()">💾</button>
+      <button class="btn-small" onclick="lockApp()">🔒</button>
+    </div>
   </div>
   <div class="page-content">
     <div class="search-wrap"><span class="search-icon">🔍</span><input id="search-input" type="text" placeholder="Cerca descrizione, categoria, persona..." oninput="renderMovimenti()"/></div>
@@ -446,6 +466,50 @@ select option{background:#111827}
   </div>
 </div>
 
+<!-- RIEPILOGO SPESE -->
+
+<div id="screen-riepilogo" class="screen">
+  <div class="app-header">
+    <div class="hamburger" onclick="openMenu()"><span></span><span></span><span></span></div>
+    <div class="app-title" id="riepilogo-title">RIEPILOGO</div>
+    <div class="header-actions">
+      <button class="btn-small" id="riepilogo-back-btn" onclick="riepilogoBack()" style="display:none">← Indietro</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <!-- Filter bar -->
+    <div id="riepilogo-filters" style="margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label class="field-label">Anno</label>
+          <select id="riepilogo-anno" onchange="riepilogoAnnoChange()" style="margin:0">
+            <option value="">— Tutto —</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Mese</label>
+          <select id="riepilogo-mese" onchange="renderRiepilogo()" style="margin:0" disabled>
+            <option value="">— Tutti i mesi —</option>
+            <option value="1">Gennaio</option><option value="2">Febbraio</option>
+            <option value="3">Marzo</option><option value="4">Aprile</option>
+            <option value="5">Maggio</option><option value="6">Giugno</option>
+            <option value="7">Luglio</option><option value="8">Agosto</option>
+            <option value="9">Settembre</option><option value="10">Ottobre</option>
+            <option value="11">Novembre</option><option value="12">Dicembre</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="chip active" id="riepilogo-tipo-tutte" onclick="setRiepilogoTipo('tutte')">Tutte</div>
+        <div class="chip" id="riepilogo-tipo-uscite" onclick="setRiepilogoTipo('uscite')">Solo uscite</div>
+        <div class="chip" id="riepilogo-tipo-entrate" onclick="setRiepilogoTipo('entrate')">Solo entrate</div>
+      </div>
+    </div>
+    <!-- Content area -->
+    <div id="riepilogo-content"></div>
+  </div>
+</div>
+
 <!-- MODAL ARRETRATI -->
 
 <div class="modal-overlay" id="arretrati-modal" onclick="if(event.target===this)closeArretratiModal()">
@@ -574,7 +638,7 @@ async function prefillUsername(){
     if(el)el.value=cfg.value;
   }
 }
-function lockApp(){S.unlocked=false;document.getElementById('setup-first').style.display='none';document.getElementById('setup-login').style.display='block';showScreen('setup');}
+function lockApp(){S.unlocked=false;clearUndo();document.getElementById('setup-first').style.display='none';document.getElementById('setup-login').style.display='block';showScreen('setup');}
 async function resetApp(){if(!confirm('Cancella TUTTI i dati?'))return;await clearStore('movimenti');await clearStore('config');await clearStore('regole');toast('App resettata');setTimeout(()=>location.reload(),800);}
 
 // ── LOAD ───────────────────────────────────────────────────────────────────
@@ -622,6 +686,7 @@ function showScreen(name){
     if(name==='conti')renderConti();
     if(name==='crediti')renderCrediti();
     if(name==='regole'){renderRegole();setTimeout(()=>checkArretrati(),400);}
+    if(name==='riepilogo'){initRiepilogo();}
   }
 }
 function openMenu(){document.getElementById('side-overlay').classList.add('show');document.getElementById('side-menu').classList.add('open');}
@@ -838,8 +903,16 @@ async function pickerAddNew(){
 function closePicker(){document.getElementById('picker-overlay').classList.remove('show');pickerType=null;}
 
 // ── MODAL MOVIMENTO ────────────────────────────────────────────────────────
-let movSegno=-1;    // importo principale
-let splitSegno=1;  // split quota: +1 = ti rimborsa, -1 = paghi tu
+let movSegno=-1;
+let splitSegno=1;
+// Undo stack — one level only, reset on app reopen
+let undoStack=null;
+// undoStack shape:
+// {type:'add', ids:[id,...], label:'Aggiunto "Spesa Lidl"'}
+// {type:'edit', original:{...mov}, label:'Modificato "Spesa Lidl"'}
+// {type:'delete', original:{...mov}, label:'Eliminato "Spesa Lidl"'}
+// {type:'regola', ids:[id,...], label:'Eseguita regola "Mutuo" (6 mov)'}
+// {type:'arretrati', ids:[id,...], label:'Creati 3 arretrati "Mutuo"'}
 function openMovModal(prefill){
   S.editingMov=null;movSegno=-1;splitSegno=1;
   document.getElementById('mov-modal-title').textContent='Nuovo Movimento';
@@ -950,17 +1023,28 @@ async function saveMov(){
   const splitFinal=split!=null?Math.abs(split)*splitSegno:null;
   const obj={data,portafoglio,descrizione,categoria,importo,split:splitFinal,conchi:conchi||'',tipoOverride:null};
   if(S.editingMov!==null)obj.id=S.editingMov;
-  const newId=await put('movimenti',obj);if(S.editingMov===null)obj.id=newId;
+  const isEditing=S.editingMov!==null;
+  // Save original for undo (edit case)
+  const originalForUndo=isEditing?S.movimenti.find(x=>x.id===S.editingMov):null;
+  const newId=await put('movimenti',obj);if(!isEditing)obj.id=newId;
   S.movimenti=await getAll('movimenti');
-  closeMovModal();toast(S.editingMov?'Aggiornato':'✓ Aggiunto');
+  closeMovModal();
+  const label=(obj.descrizione||obj.categoria||obj.portafoglio||'movimento').slice(0,30);
+  if(isEditing){
+    setUndo({type:'edit',original:originalForUndo,label:'Modifica "'+label+'"'});
+  } else {
+    setUndo({type:'add',ids:[obj.id],label:'Aggiunto "'+label+'"'});
+  }
   if(S.currentTab==='movimenti')renderMovimenti();
   else if(S.currentTab==='conti')renderConti();
   else if(S.currentTab==='crediti')renderCrediti();
 }
 async function deleteMov(){
   if(!S.editingMov)return;if(!confirm('Eliminare?'))return;
+  const orig=S.movimenti.find(x=>x.id===S.editingMov);
   await del('movimenti',S.editingMov);S.movimenti=await getAll('movimenti');
-  closeMovModal();toast('Eliminato');
+  closeMovModal();
+  if(orig)setUndo({type:'delete',original:orig,label:'Eliminato "'+(orig.descrizione||orig.categoria||'movimento').slice(0,30)+'"'});
   if(S.currentTab==='movimenti')renderMovimenti();
   else if(S.currentTab==='conti')renderConti();
   else if(S.currentTab==='crediti')renderCrediti();
@@ -1283,19 +1367,62 @@ async function eseguiArretrati(){
     return toast("Inserisci l'importo base",'error');
   const base=baseAbs?Math.abs(baseAbs):0;
   let totMov=0;
+  const preCount=S.movimenti.length;
   for(const d of arretratiDate){
     await creaMovimentiRegola(r,d,base);
     totMov+=r.steps.length;
   }
-  // Save last run as most recent date
   const lastDate=arretratiDate[arretratiDate.length-1];
   await saveLastRun(r.id,lastDate);
   S.movimenti=await getAll('movimenti');
+  const newMovs=S.movimenti.slice(preCount);
+  const newIds2=newMovs.map(m=>m.id);
   closeArretratiModal();
-  toast(`✓ ${totMov} movimenti creati per ${arretratiDate.length} date`);
-  // Check if there are more regole with arretrati
+  setUndo({type:'arretrati',ids:newIds2,label:arretratiDate.length+' arretrati "'+r.nome+'"'});
+  toast('✓ '+totMov+' movimenti creati per '+arretratiDate.length+' date');
   setTimeout(()=>checkArretrati(),300);
   renderMovimenti();
+}
+
+function setUndo(action){
+  undoStack=action;
+  const btn=document.getElementById('undo-btn');
+  if(btn){
+    btn.style.display='block';
+    btn.title='Annulla: '+action.label;
+    // Show tooltip/toast
+    toast('↩  Tocca per annullare: '+action.label);
+  }
+}
+function clearUndo(){
+  undoStack=null;
+  const btn=document.getElementById('undo-btn');
+  if(btn)btn.style.display='none';
+}
+
+async function doUndo(){
+  if(!undoStack)return;
+  const u=undoStack;
+  clearUndo();
+  if(u.type==='add'||u.type==='regola'||u.type==='arretrati'){
+    // Delete all created movements
+    for(const id of u.ids)await del('movimenti',id);
+    S.movimenti=await getAll('movimenti');
+    toast('✓ Annullato: '+u.label);
+  } else if(u.type==='edit'){
+    // Restore original movement
+    await put('movimenti',u.original);
+    S.movimenti=await getAll('movimenti');
+    toast('✓ Annullato: '+u.label);
+  } else if(u.type==='delete'){
+    // Re-insert deleted movement
+    await put('movimenti',u.original);
+    S.movimenti=await getAll('movimenti');
+    toast('✓ Annullato: '+u.label);
+  }
+  if(S.currentTab==='movimenti')renderMovimenti();
+  else if(S.currentTab==='conti')renderConti();
+  else if(S.currentTab==='crediti')renderCrediti();
 }
 
 async function creaMovimentiRegola(r,dataVal,base){
@@ -1322,11 +1449,13 @@ async function eseguiRegola(){
   const baseAbs=parseNum(document.getElementById('esegui-importo').value);
   if(!dataVal)return toast('Inserisci la data','error');
   if(baseAbs===null)return toast("Inserisci l'importo base",'error');
+  const prevCount=S.movimenti.length;
   await creaMovimentiRegola(r,dataVal,Math.abs(baseAbs));
   await saveLastRun(r.id,dataVal);
   S.movimenti=await getAll('movimenti');
+  const newIds=S.movimenti.slice(prevCount).map(m=>m.id);
   closeEseguiModal();
-  toast('✓ Movimenti creati');
+  setUndo({type:'regola',ids:newIds,label:'Regola "'+r.nome+'" ('+r.steps.length+' mov)'});
   switchTab('movimenti');
 }
 
@@ -1365,6 +1494,267 @@ async function doImport(e){
     else if(S.currentTab==='regole')renderRegole();
   }catch(ex){toast('Errore: '+ex.message,'error');}
   e.target.value='';
+}
+
+// ── RIEPILOGO SPESE ────────────────────────────────────────────────────────
+let riepilogoTipo='tutte';
+// Navigation stack: [{level:'top'}, {level:'anno',anno:2026}, {level:'mese',anno:2026,mese:4}, {level:'categoria',anno:2026,mese:4,cat:'Spesa'}]
+let riepilogoNav=[];
+
+function initRiepilogo(){
+  // Populate anno select
+  const anni=[...new Set(S.movimenti.map(m=>m.data?m.data.slice(0,4):null).filter(Boolean))].sort().reverse();
+  const sel=document.getElementById('riepilogo-anno');
+  sel.innerHTML='<option value="">— Tutto il tempo —</option>'+anni.map(a=>`<option value="${a}">${a}</option>`).join('');
+  document.getElementById('riepilogo-mese').value='';
+  document.getElementById('riepilogo-mese').disabled=true;
+  riepilogoNav=[];
+  updateRiepilogoBackBtn();
+  renderRiepilogo();
+}
+
+function riepilogoAnnoChange(){
+  const anno=document.getElementById('riepilogo-anno').value;
+  const meseSel=document.getElementById('riepilogo-mese');
+  if(anno){meseSel.disabled=false;}
+  else{meseSel.disabled=true;meseSel.value='';}
+  riepilogoNav=[];
+  updateRiepilogoBackBtn();
+  renderRiepilogo();
+}
+
+function setRiepilogoTipo(tipo){
+  riepilogoTipo=tipo;
+  ['tutte','uscite','entrate'].forEach(t=>{
+    document.getElementById('riepilogo-tipo-'+t).classList.toggle('active',t===tipo);
+  });
+  renderRiepilogo();
+}
+
+function updateRiepilogoBackBtn(){
+  const btn=document.getElementById('riepilogo-back-btn');
+  const title=document.getElementById('riepilogo-title');
+  if(riepilogoNav.length>0){
+    btn.style.display='block';
+    const last=riepilogoNav[riepilogoNav.length-1];
+    const mesiNomi=['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    if(last.level==='categoria')title.textContent=(last.cat||'').toUpperCase().slice(0,18);
+    else if(last.level==='mese')title.textContent=mesiNomi[last.mese]+' '+last.anno;
+    else title.textContent='RIEPILOGO';
+  } else {
+    btn.style.display='none';
+    title.textContent='RIEPILOGO';
+  }
+}
+
+function riepilogoBack(){
+  if(riepilogoNav.length>0)riepilogoNav.pop();
+  updateRiepilogoBackBtn();
+  renderRiepilogo();
+}
+
+function filteredMovimenti(){
+  const anno=document.getElementById('riepilogo-anno').value;
+  const mese=document.getElementById('riepilogo-mese').value;
+  return S.movimenti.filter(m=>{
+    if(m.categoria==='Saldo Iniziale')return false;
+    if(anno&&!m.data.startsWith(anno))return false;
+    if(mese&&parseInt(m.data.slice(5,7))!==parseInt(mese))return false;
+    const n=netto(m.importo,m.split);const t=tipo(n,m.tipoOverride);
+    if(riepilogoTipo==='uscite'&&t!=='S')return false;
+    if(riepilogoTipo==='entrate'&&t!=='E')return false;
+    return true;
+  });
+}
+
+function renderRiepilogo(){
+  const nav=riepilogoNav[riepilogoNav.length-1]||null;
+  const anno=document.getElementById('riepilogo-anno').value;
+  const mese=document.getElementById('riepilogo-mese').value;
+
+  // Determine what level to render
+  if(nav&&nav.level==='categoria'){
+    renderRiepilogoTransazioni(nav);
+  } else if(nav&&nav.level==='mese'){
+    renderRiepilogoCategorie(nav.anno, nav.mese);
+  } else if(!anno&&!mese){
+    // No filters: show years
+    renderRiepilogoAnni();
+  } else if(anno&&!mese){
+    // Anno selected, no mese: show 12 months of that year
+    renderRiepilogoMesi(parseInt(anno));
+  } else if(anno&&mese){
+    // Anno + mese: show categories of that month
+    renderRiepilogoCategorie(parseInt(anno), parseInt(mese));
+  }
+}
+
+function fmtMese(n){return['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'][n]||'';}
+function fmtMeseShort(n){return['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][n]||'';}
+
+function renderRiepilogoAnni(){
+  const anni=[...new Set(S.movimenti.map(m=>m.data?parseInt(m.data.slice(0,4)):null).filter(Boolean))].sort().reverse();
+  if(!anni.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato</div>';return;}
+  let html='<div class="setup-info" style="margin-bottom:14px">Seleziona un anno dal menu in alto per vedere i mesi, oppure tocca un anno qui sotto.</div>';
+  let grandTotal=0;
+  const rows=anni.map(anno=>{
+    const movs=S.movimenti.filter(m=>m.data&&m.data.startsWith(String(anno))&&m.categoria!=='Saldo Iniziale');
+    let tot=0;
+    movs.forEach(m=>{const n=netto(m.importo,m.split);const t=tipo(n,m.tipoOverride);
+      if(riepilogoTipo==='tutte')tot+=n;
+      else if(riepilogoTipo==='uscite'&&t==='S')tot+=n;
+      else if(riepilogoTipo==='entrate'&&t==='E')tot+=n;
+    });
+    grandTotal+=tot;
+    return{anno,tot,count:movs.length};
+  });
+  html+=rows.map(r=>{
+    const color=r.tot>=0?'#86efac':'#fca5a5';
+    return`<div class="riepilogo-row" onclick="drillAnno(${r.anno})">
+      <div><div class="riepilogo-label">${r.anno}</div><div class="riepilogo-count">${r.count} movimenti</div></div>
+      <div style="text-align:right"><div class="riepilogo-amount" style="color:${color}">${fmtEur(r.tot)}</div><div style="font-size:11px;color:#4a5068">→</div></div>
+    </div>`;
+  }).join('');
+  html+=`<div class="riepilogo-total"><div><div class="riepilogo-total-label">Totale complessivo</div></div><div class="riepilogo-total-value">${fmtEur(grandTotal)}</div></div>`;
+  document.getElementById('riepilogo-content').innerHTML=html;
+}
+
+function drillAnno(anno){
+  document.getElementById('riepilogo-anno').value=String(anno);
+  document.getElementById('riepilogo-mese').disabled=false;
+  riepilogoAnnoChange();
+}
+
+function renderRiepilogoMesi(anno){
+  const mesiNomi=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  let html='';
+  let grandTotal=0;
+  const rows=[];
+  for(let m2=1;m2<=12;m2++){
+    const movs=S.movimenti.filter(mv=>mv.data&&mv.data.startsWith(anno+'-'+String(m2).padStart(2,'0'))&&mv.categoria!=='Saldo Iniziale');
+    if(!movs.length)continue;
+    let tot=0;
+    movs.forEach(mv=>{const n=netto(mv.importo,mv.split);const t=tipo(n,mv.tipoOverride);
+      if(riepilogoTipo==='tutte')tot+=n;
+      else if(riepilogoTipo==='uscite'&&t==='S')tot+=n;
+      else if(riepilogoTipo==='entrate'&&t==='E')tot+=n;
+    });
+    grandTotal+=tot;
+    rows.push({mese:m2,nome:mesiNomi[m2],tot,count:movs.length});
+  }
+  if(!rows.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato per '+anno+'</div>';return;}
+  // Max abs for bar scaling
+  const maxAbs=Math.max(...rows.map(r=>Math.abs(r.tot)))||1;
+  html+=rows.map(r=>{
+    const color=r.tot>=0?'#86efac':'#fca5a5';
+    const barColor=r.tot>=0?'#10b981':'#ef4444';
+    const barW=Math.round(Math.abs(r.tot)/maxAbs*100);
+    return`<div class="riepilogo-row" onclick="drillMese(${anno},${r.mese})">
+      <div style="flex:1;min-width:0">
+        <div class="riepilogo-label">${r.nome}</div>
+        <div class="riepilogo-bar-wrap"><div class="riepilogo-bar" style="width:${barW}%;--bar-color:${barColor}"></div></div>
+        <div class="riepilogo-count">${r.count} movimenti</div>
+      </div>
+      <div style="text-align:right;margin-left:12px">
+        <div class="riepilogo-amount" style="color:${color}">${fmtEur(r.tot)}</div>
+        <div style="font-size:11px;color:#4a5068">→</div>
+      </div>
+    </div>`;
+  }).join('');
+  html+=`<div class="riepilogo-total"><div><div class="riepilogo-total-label">Totale ${anno}</div></div><div class="riepilogo-total-value" style="color:${grandTotal>=0?'#86efac':'#fca5a5'}">${fmtEur(grandTotal)}</div></div>`;
+  document.getElementById('riepilogo-content').innerHTML=html;
+}
+
+function drillMese(anno,mese){
+  document.getElementById('riepilogo-anno').value=String(anno);
+  document.getElementById('riepilogo-mese').value=String(mese);
+  document.getElementById('riepilogo-mese').disabled=false;
+  riepilogoNav.push({level:'mese',anno,mese});
+  updateRiepilogoBackBtn();
+  renderRiepilogoCategorie(anno,mese);
+}
+
+function renderRiepilogoCategorie(anno,mese){
+  const prefix=anno+'-'+String(mese).padStart(2,'0');
+  const movs=S.movimenti.filter(mv=>mv.data&&mv.data.startsWith(prefix)&&mv.categoria!=='Saldo Iniziale');
+  // Group by categoria
+  const catMap={};
+  movs.forEach(mv=>{
+    const n=netto(mv.importo,mv.split);const t=tipo(n,mv.tipoOverride);
+    let include=false;
+    if(riepilogoTipo==='tutte')include=true;
+    else if(riepilogoTipo==='uscite'&&t==='S')include=true;
+    else if(riepilogoTipo==='entrate'&&t==='E')include=true;
+    if(!include)return;
+    const cat=mv.categoria||'(senza categoria)';
+    if(!catMap[cat])catMap[cat]={tot:0,count:0};
+    catMap[cat].tot+=n;catMap[cat].count++;
+  });
+  const cats=Object.entries(catMap).sort((a,b)=>Math.abs(b[1].tot)-Math.abs(a[1].tot));
+  if(!cats.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato</div>';return;}
+  const grandTotal=cats.reduce((a,b)=>a+b[1].tot,0);
+  const maxAbs=Math.max(...cats.map(c=>Math.abs(c[1].tot)))||1;
+  let html=`<div class="riepilogo-row header-row">
+    <div class="riepilogo-label" style="color:#f59e0b">${fmtMese(mese)} ${anno}</div>
+    <div class="riepilogo-amount" style="color:${grandTotal>=0?'#86efac':'#fca5a5'}">${fmtEur(grandTotal)}</div>
+  </div>`;
+  html+=cats.map(([cat,data])=>{
+    const color=data.tot>=0?'#86efac':'#fca5a5';
+    const barColor=data.tot>=0?'#10b981':'#ef4444';
+    const barW=Math.round(Math.abs(data.tot)/maxAbs*100);
+    return`<div class="riepilogo-row" onclick="drillCategoria(${anno},${mese},'${cat.replace(/'/g,"\'")}')">
+      <div style="flex:1;min-width:0">
+        <div class="riepilogo-label">${esc(cat)}</div>
+        <div class="riepilogo-bar-wrap"><div class="riepilogo-bar" style="width:${barW}%;--bar-color:${barColor}"></div></div>
+        <div class="riepilogo-count">${data.count} moviment${data.count===1?'o':'i'}</div>
+      </div>
+      <div style="text-align:right;margin-left:12px">
+        <div class="riepilogo-amount" style="color:${color}">${fmtEur(data.tot)}</div>
+        <div style="font-size:11px;color:#4a5068">→</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('riepilogo-content').innerHTML=html;
+}
+
+function drillCategoria(anno,mese,cat){
+  riepilogoNav.push({level:'categoria',anno,mese,cat});
+  updateRiepilogoBackBtn();
+  renderRiepilogoTransazioni({anno,mese,cat});
+}
+
+function renderRiepilogoTransazioni(nav){
+  const{anno,mese,cat}=nav;
+  const prefix=anno+'-'+String(mese).padStart(2,'0');
+  const movs=S.movimenti.filter(mv=>
+    mv.data&&mv.data.startsWith(prefix)&&
+    (mv.categoria||'(senza categoria)')===cat&&
+    mv.categoria!=='Saldo Iniziale'
+  ).sort((a,b)=>b.data.localeCompare(a.data)||b.id-a.id);
+
+  if(!movs.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>Nessuna spesa</div>';return;}
+  const tot=movs.reduce((a,m)=>a+netto(m.importo,m.split),0);
+  const meta2=pm(movs[0].portafoglio);
+  let html=`<div class="riepilogo-row header-row" style="margin-bottom:12px">
+    <div><div class="riepilogo-label" style="color:#f59e0b">${esc(cat)}</div>
+    <div class="riepilogo-count">${fmtMese(mese)} ${anno} · ${movs.length} moviment${movs.length===1?'o':'i'}</div></div>
+    <div class="riepilogo-amount" style="color:${tot>=0?'#86efac':'#fca5a5'}">${fmtEur(tot)}</div>
+  </div>`;
+  html+=movs.map(m=>{
+    const n=netto(m.importo,m.split);
+    const color=n>=0?'#86efac':'#fca5a5';
+    const meta3=pm(m.portafoglio);
+    const splitLine=m.split?`<span style="color:#f59e0b;font-size:10px"> · split ${fmtEur(m.split)}${m.conchi?' ('+esc(m.conchi)+')':''}</span>`:'';
+    return`<div class="mov-detail-row" onclick="editMov(${m.id});showScreen('movimenti')">
+      <div style="flex:1;min-width:0">
+        <div style="color:#fff;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.descrizione||'(senza desc)')}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:2px">${fmtIT(m.data)} · <span style="color:${meta3.saldo};font-size:10px">${esc(m.portafoglio||'')}</span>${splitLine}</div>
+      </div>
+      <div style="font-weight:900;font-size:14px;color:${color};flex-shrink:0;margin-left:10px">${fmtEur(m.importo)}</div>
+    </div>`;
+  }).join('');
+  html+=`<div class="riepilogo-total"><div><div class="riepilogo-total-label">Totale categoria</div></div><div class="riepilogo-total-value" style="color:${tot>=0?'#86efac':'#fca5a5'}">${fmtEur(tot)}</div></div>`;
+  document.getElementById('riepilogo-content').innerHTML=html;
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
