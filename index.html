@@ -184,8 +184,8 @@ select option{background:#111827}
 .rec-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 8px;text-align:center;cursor:pointer;color:#8a8fa8;font-size:12px;font-weight:700;transition:all 0.15s}
 .rec-btn div{margin-top:4px;font-size:11px;letter-spacing:0.5px}
 .rec-btn.active{background:rgba(245,158,11,0.12);border-color:#f59e0b;color:#f59e0b}
-.day-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;color:#8a8fa8;font-size:12px;font-weight:700}
-.day-btn.active{background:rgba(245,158,11,0.15);border-color:#f59e0b;color:#f59e0b}
+.day-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 2px;text-align:center;cursor:pointer;color:#8a8fa8;font-size:13px;font-weight:800;font-family:‘Nunito’,sans-serif;width:100%;touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:44px}
+.day-btn.active{background:rgba(245,158,11,0.2);border-color:#f59e0b;color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.3)}
 </style>
 
 </head>
@@ -396,14 +396,14 @@ select option{background:#111827}
       <!-- Weekly: day of week -->
       <div id="rec-weekly-opts" style="display:none;margin-top:8px">
         <label class="field-label">Giorno della settimana</label>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:6px">
-          <div class="day-btn" data-day="1" onclick="toggleDay(1)">L</div>
-          <div class="day-btn" data-day="2" onclick="toggleDay(2)">Ma</div>
-          <div class="day-btn" data-day="3" onclick="toggleDay(3)">Me</div>
-          <div class="day-btn" data-day="4" onclick="toggleDay(4)">G</div>
-          <div class="day-btn" data-day="5" onclick="toggleDay(5)">V</div>
-          <div class="day-btn" data-day="6" onclick="toggleDay(6)">S</div>
-          <div class="day-btn" data-day="0" onclick="toggleDay(0)">D</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px">
+          <button type="button" class="day-btn" data-day="1" onclick="toggleDay(1)">L</button>
+          <button type="button" class="day-btn" data-day="2" onclick="toggleDay(2)">Ma</button>
+          <button type="button" class="day-btn" data-day="3" onclick="toggleDay(3)">Me</button>
+          <button type="button" class="day-btn" data-day="4" onclick="toggleDay(4)">G</button>
+          <button type="button" class="day-btn" data-day="5" onclick="toggleDay(5)">V</button>
+          <button type="button" class="day-btn" data-day="6" onclick="toggleDay(6)">S</button>
+          <button type="button" class="day-btn" data-day="0" onclick="toggleDay(0)">D</button>
         </div>
       </div>
       <!-- Monthly: day of month -->
@@ -978,10 +978,10 @@ function renderRegole(){
       const dayNames=['D','L','Ma','Me','G','V','S'];
       const names=rec.days.map(d=>dayNames[d]).join(', ');
       recBadge=`<span style="background:rgba(139,92,246,0.15);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">📅 Ogni ${names}</span>`;
-      isDue=rec.days.includes(oggi.getDay());
+      const oggiLocal=new Date(oggi.getFullYear(),oggi.getMonth(),oggi.getDate());isDue=rec.days.includes(oggiLocal.getDay());
     } else if(rec.type==='monthly'&&rec.monthDay){
       recBadge=`<span style="background:rgba(139,92,246,0.15);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">🗓 Ogni ${rec.monthDay} del mese</span>`;
-      isDue=oggi.getDate()===rec.monthDay;
+      isDue=new Date().getDate()===rec.monthDay;
     } else if(rec.type==='custom'&&rec.everyNDays){
       recBadge=`<span style="background:rgba(139,92,246,0.15);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:6px">⚙️ Ogni ${rec.everyNDays} giorni</span>`;
     }
@@ -1161,31 +1161,34 @@ function closeEseguiModal(){document.getElementById('esegui-modal').classList.re
 function closeArretratiModal(){document.getElementById('arretrati-modal').classList.remove('show');}
 
 // Compute all missed occurrences between lastRun and today
+function localDate(iso){
+  // Parse ISO date string as LOCAL date (avoid UTC offset issues)
+  const[y,m,d]=iso.split('-').map(Number);
+  return new Date(y,m-1,d);
+}
 function computeOccorrenze(rec, lastRunISO, oggi){
   const dates=[];
   if(!rec||rec.type==='none')return dates;
-  const start=lastRunISO?new Date(lastRunISO+'T00:00:00'):null;
-  // Iterate from day after lastRun (or 30 days ago if never run) up to yesterday
-  const from=start?new Date(start):new Date(oggi);
-  if(!start) from.setDate(from.getDate()-60); // look back 60 days max if never run
-  else from.setDate(from.getDate()+1); // day after last run
-  const to=new Date(oggi); to.setDate(to.getDate()-1); // up to yesterday
+  // Use local dates throughout to avoid timezone day-shift bugs
+  const todayLocal=new Date(oggi.getFullYear(),oggi.getMonth(),oggi.getDate());
+  const start=lastRunISO?localDate(lastRunISO):null;
+  const from=start?new Date(start.getFullYear(),start.getMonth(),start.getDate()+1)
+                  :new Date(todayLocal.getFullYear(),todayLocal.getMonth(),todayLocal.getDate()-60);
+  const to=new Date(todayLocal.getFullYear(),todayLocal.getMonth(),todayLocal.getDate()-1);
   if(from>to)return dates;
   const cur=new Date(from);
-  let safetyCount=0;
-  while(cur<=to&&safetyCount<365){
-    safetyCount++;
-    const iso=fmtISO(cur);
-    if(rec.type==='weekly'&&rec.days&&rec.days.includes(cur.getDay()))dates.push(iso);
+  let safety=0;
+  while(cur<=to&&safety<365){
+    safety++;
+    const iso=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+    const dow=cur.getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+    if(rec.type==='weekly'&&rec.days&&rec.days.includes(dow))dates.push(iso);
     else if(rec.type==='monthly'&&rec.monthDay&&cur.getDate()===rec.monthDay)dates.push(iso);
     else if(rec.type==='custom'&&rec.everyNDays){
       if(start){
         const diff=Math.round((cur-start)/(1000*60*60*24));
         if(diff>0&&diff%rec.everyNDays===0)dates.push(iso);
-      } else {
-        // Never run: just add today as first occurrence
-        dates.push(iso);break;
-      }
+      } else { dates.push(iso); break; }
     }
     cur.setDate(cur.getDate()+1);
   }
