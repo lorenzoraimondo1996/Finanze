@@ -491,8 +491,10 @@ window.onerror=function(msg,src,line,col,err){
 <div id="screen-riepilogo" class="screen">
   <div class="app-header">
     <div class="hamburger" onclick="openMenu()"><span></span><span></span><span></span></div>
-    <div class="app-title">RIEPILOGO</div>
-    <div class="header-actions"></div>
+    <div class="app-title" id="riepilogo-title">RIEPILOGO</div>
+    <div class="header-actions">
+      <button class="btn-small" id="riepilogo-back-btn" onclick="riepilogoBack()" style="display:none">← Indietro</button>
+    </div>
   </div>
   <div class="page-content">
     <!-- Filtri con select nativi iOS — sempre funzionanti -->
@@ -707,7 +709,7 @@ function showScreen(name){
     if(name==='conti')renderConti();
     if(name==='crediti')renderCrediti();
     if(name==='regole'){renderRegole();setTimeout(()=>checkArretrati(),400);}
-    if(name==='riepilogo'){_dbg('switchTab riepilogo, calling initRiepilogo'); try{initRiepilogo();}catch(e){_dbg('❌ initRiepilogo threw: '+e.message);} }
+    if(name==='riepilogo'){_dbg('switchTab riepilogo'); try{initRiepilogo();}catch(e){_dbg('❌ '+e.message);} }
   }
 }
 function openMenu(){document.getElementById('side-overlay').classList.add('show');document.getElementById('side-menu').classList.add('open');}
@@ -1581,15 +1583,17 @@ function rUpdateHeader(){
   const btn=document.getElementById('riepilogo-back-btn');
   const title=document.getElementById('riepilogo-title');
   if(rNav.length){
-    btn.style.display='block';
+    if(btn)btn.style.display='block';
     const last=rNav[rNav.length-1];
     const mn=['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-    if(last.level==='cat') title.textContent=(last.cat||'').slice(0,18).toUpperCase();
-    else if(last.level==='mese') title.textContent=mn[last.mese]+' '+last.anno;
-    else title.textContent='RIEPILOGO';
+    if(title){
+      if(last.level==='cat') title.textContent=(last.cat||'').slice(0,18).toUpperCase();
+      else if(last.level==='mese') title.textContent=mn[last.mese]+' '+last.anno;
+      else title.textContent='RIEPILOGO';
+    }
   } else {
-    btn.style.display='none';
-    title.textContent='RIEPILOGO';
+    if(btn)btn.style.display='none';
+    if(title)title.textContent='RIEPILOGO';
   }
 }
 
