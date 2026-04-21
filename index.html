@@ -205,6 +205,27 @@ select option{background:#111827}
 
 </head>
 <body>
+<div id="debug-box" style="position:fixed;top:0;left:0;right:0;background:rgba(255,200,0,0.95);color:#000;font:11px monospace;padding:8px;z-index:99999;max-height:200px;overflow-y:auto;border-bottom:2px solid red;display:none">
+  <div style="display:flex;justify-content:space-between;font-weight:900">
+    <span>🐛 DEBUG</span>
+    <span onclick="document.getElementById('debug-box').style.display='none'" style="cursor:pointer">✕</span>
+  </div>
+  <div id="debug-log"></div>
+</div>
+<script>
+window._dbg=function(msg){
+  const box=document.getElementById('debug-box');
+  const log=document.getElementById('debug-log');
+  if(!box||!log)return;
+  box.style.display='block';
+  const ts=new Date().toLocaleTimeString();
+  log.innerHTML=ts+': '+msg+'<br>'+log.innerHTML;
+};
+window.onerror=function(msg,src,line,col,err){
+  _dbg('❌ '+msg+' @ line '+line);
+  return false;
+};
+</script>
 <div id="toast"></div>
 <div id="loading-overlay"><div class="spinner"></div><p style="color:#f59e0b;font-size:11px;letter-spacing:3px;margin-top:8px">CARICAMENTO</p></div>
 
@@ -687,7 +708,7 @@ function showScreen(name){
     if(name==='conti')renderConti();
     if(name==='crediti')renderCrediti();
     if(name==='regole'){renderRegole();setTimeout(()=>checkArretrati(),400);}
-    if(name==='riepilogo'){initRiepilogo();}
+    if(name==='riepilogo'){_dbg('switchTab riepilogo, calling initRiepilogo'); try{initRiepilogo();}catch(e){_dbg('❌ initRiepilogo threw: '+e.message);} }
   }
 }
 function openMenu(){document.getElementById('side-overlay').classList.add('show');document.getElementById('side-menu').classList.add('open');}
@@ -1505,9 +1526,10 @@ let rNav=[];
 // ── Global tap registry (most reliable on iOS Safari) ─────────────────────
 const _R={};let _Rid=0;
 function rTap(fn){const id='r'+(++_Rid);_R[id]=fn;return id;}
-function rDo(id){if(_R[id])_R[id]();}
+function rDo(id){_dbg('rDo: '+id+' exists='+(!!_R[id])); if(_R[id]){try{_R[id]();}catch(e){_dbg('❌ tap fn threw: '+e.message);}}}
 
 function initRiepilogo(){
+  _dbg('initRiepilogo called, S.movimenti='+(S.movimenti?S.movimenti.length:'NULL'));
   // Populate anno
   const anni=[...new Set(S.movimenti.map(m=>m.data?m.data.slice(0,4):null).filter(Boolean))].sort().reverse();
   const sel=document.getElementById('riepilogo-anno');
@@ -1526,6 +1548,7 @@ function initRiepilogo(){
 
 function rAnnoChange(){
   const anno=document.getElementById('riepilogo-anno').value;
+  _dbg('rAnnoChange: anno='+anno);
   const mEl=document.getElementById('riepilogo-mese');
   mEl.disabled=!anno; if(!anno)mEl.value='';
   // Populate categorie for this anno
@@ -1547,6 +1570,7 @@ function rAnnoChange(){
 }
 
 function setRiepilogoTipo(t){
+  _dbg('setRiepilogoTipo: '+t);
   rTipo=t;
   ['tutte','uscite','entrate'].forEach(x=>{
     document.getElementById('riepilogo-tipo-'+x).classList.toggle('active',x===t);
@@ -1622,6 +1646,7 @@ function rTotal(label,amount){
 }
 
 function rRender(){
+  _dbg('rRender called');
   // Reset tap registry
   _Rid=0;Object.keys(_R).forEach(k=>delete _R[k]);
   const nav=rNav[rNav.length-1]||null;
