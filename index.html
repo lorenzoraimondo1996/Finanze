@@ -205,20 +205,19 @@ select option{background:#111827}
 
 </head>
 <body>
-<div id="debug-box" style="position:fixed;top:0;left:0;right:0;background:rgba(255,200,0,0.95);color:#000;font:11px monospace;padding:8px;z-index:99999;max-height:200px;overflow-y:auto;border-bottom:2px solid red;display:none">
-  <div style="display:flex;justify-content:space-between;font-weight:900">
-    <span>🐛 DEBUG</span>
-    <span onclick="document.getElementById('debug-box').style.display='none'" style="cursor:pointer">✕</span>
+<div id="debug-box" style="position:fixed;top:env(safe-area-inset-top,40px);left:0;right:0;background:#fde047;color:#000;font:11px -apple-system,monospace;padding:10px;z-index:99999;max-height:280px;overflow-y:auto;border-bottom:3px solid red;box-shadow:0 4px 12px rgba(0,0,0,0.5)">
+  <div style="display:flex;justify-content:space-between;font-weight:900;margin-bottom:6px">
+    <span>🐛 DEBUG v3 — file caricato OK</span>
+    <span onclick="document.getElementById('debug-box').style.display='none'" style="cursor:pointer;font-size:18px">✕</span>
   </div>
-  <div id="debug-log"></div>
+  <div id="debug-log" style="line-height:1.5">In attesa di eventi...</div>
 </div>
 <script>
 window._dbg=function(msg){
-  const box=document.getElementById('debug-box');
   const log=document.getElementById('debug-log');
-  if(!box||!log)return;
-  box.style.display='block';
+  if(!log)return;
   const ts=new Date().toLocaleTimeString();
+  if(log.innerHTML==='In attesa di eventi...')log.innerHTML='';
   log.innerHTML=ts+': '+msg+'<br>'+log.innerHTML;
 };
 window.onerror=function(msg,src,line,col,err){
