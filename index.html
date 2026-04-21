@@ -1684,8 +1684,23 @@ function rShowAnni(){
 }
 
 function rDrillAnno(anno){
-  document.getElementById('riepilogo-anno').value=String(anno);
-  rAnnoChange();
+  // Set select value and directly show mesi — don't rely on onchange firing
+  const sel=document.getElementById('riepilogo-anno');
+  if(sel)sel.value=String(anno);
+  const mEl=document.getElementById('riepilogo-mese');
+  if(mEl)mEl.disabled=false;
+  // Populate categorie
+  const cats=[...new Set(S.movimenti
+    .filter(m=>m.data&&m.data.startsWith(String(anno))&&m.categoria&&m.categoria!=='Saldo Iniziale')
+    .map(m=>m.categoria))].sort();
+  const cEl=document.getElementById('riepilogo-cat');
+  if(cEl){
+    cEl.innerHTML='<option value="">— Tutte le categorie —</option>'+
+      cats.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+esc(c)+'</option>').join('');
+    cEl.disabled=false;
+  }
+  _dbg('rDrillAnno: '+anno+', showing mesi');
+  rShowMesi(anno);
 }
 
 // ── MESI ──────────────────────────────────────────────────────────────────
@@ -1711,11 +1726,13 @@ function rShowMesi(anno){
 }
 
 function rDrillMese(anno,mese){
-  document.getElementById('riepilogo-anno').value=String(anno);
+  const sel=document.getElementById('riepilogo-anno');
+  if(sel)sel.value=String(anno);
   const mEl=document.getElementById('riepilogo-mese');
-  mEl.value=String(mese);mEl.disabled=false;
+  if(mEl){mEl.value=String(mese);mEl.disabled=false;}
   rNav.push({level:'mese',anno,mese});
   rUpdateHeader();
+  _dbg('rDrillMese: '+anno+'/'+mese);
   rShowCat(anno,mese);
 }
 
