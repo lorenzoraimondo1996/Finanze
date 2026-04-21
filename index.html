@@ -1498,43 +1498,31 @@ async function doImport(e){
 
 // ── RIEPILOGO SPESE ────────────────────────────────────────────────────────
 let riepilogoTipo='tutte';
-// Navigation stack: [{level:'top'}, {level:'anno',anno:2026}, {level:'mese',anno:2026,mese:4}, {level:'categoria',anno:2026,mese:4,cat:'Spesa'}]
 let riepilogoNav=[];
+// Global tap registry — avoids all iOS Safari onclick/addEventListener issues
+const _tap={};
+let _tapId=0;
+function regTap(fn){const id='t'+(++_tapId);_tap[id]=fn;return id;}
+function doTap(id){if(_tap[id])_tap[id]();}
 
 function initRiepilogo(){
   const anni=[...new Set(S.movimenti.map(m=>m.data?m.data.slice(0,4):null).filter(Boolean))].sort().reverse();
   const sel=document.getElementById('riepilogo-anno');
-  sel.innerHTML='<option value="">— Tutto il tempo —</option>'+anni.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
+  sel.innerHTML='<option value="">— Tutto il tempo —</option>'+
+    anni.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
   document.getElementById('riepilogo-mese').value='';
   document.getElementById('riepilogo-mese').disabled=true;
   riepilogoNav=[];
+  _tapId=0;Object.keys(_tap).forEach(k=>delete _tap[k]);
   updateRiepilogoBackBtn();
-  // Event delegation on container — one listener handles all row taps reliably on iOS
-  const cont=document.getElementById('riepilogo-content');
-  if(!cont._delegated){
-    cont._delegated=true;
-    cont.addEventListener('click',function(e){
-      const row=e.target.closest('[data-action]');
-      if(!row)return;
-      const a=row.dataset.action;
-      const anno=row.dataset.anno?parseInt(row.dataset.anno):null;
-      const mese=row.dataset.mese?parseInt(row.dataset.mese):null;
-      const cat=row.dataset.cat||null;
-      const movId=row.dataset.movid?parseInt(row.dataset.movid):null;
-      if(a==='drill-anno')drillAnno(anno);
-      else if(a==='drill-mese')drillMese(anno,mese);
-      else if(a==='drill-cat')drillCategoria(anno,mese,cat);
-      else if(a==='edit-mov'){editMov(movId);showScreen('movimenti');}
-    });
-  }
   renderRiepilogo();
 }
 
 function riepilogoAnnoChange(){
   const anno=document.getElementById('riepilogo-anno').value;
   const meseSel=document.getElementById('riepilogo-mese');
-  if(anno){meseSel.disabled=false;}
-  else{meseSel.disabled=true;meseSel.value='';}
+  meseSel.disabled=!anno;
+  if(!anno)meseSel.value='';
   riepilogoNav=[];
   updateRiepilogoBackBtn();
   renderRiepilogo();
@@ -1551,12 +1539,12 @@ function setRiepilogoTipo(tipo){
 function updateRiepilogoBackBtn(){
   const btn=document.getElementById('riepilogo-back-btn');
   const title=document.getElementById('riepilogo-title');
+  const mesiN=['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   if(riepilogoNav.length>0){
     btn.style.display='block';
     const last=riepilogoNav[riepilogoNav.length-1];
-    const mesiNomi=['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-    if(last.level==='categoria')title.textContent=(last.cat||'').toUpperCase().slice(0,18);
-    else if(last.level==='mese')title.textContent=mesiNomi[last.mese]+' '+last.anno;
+    if(last.level==='categoria')title.textContent=(last.cat||'').slice(0,18).toUpperCase();
+    else if(last.level==='mese')title.textContent=mesiN[last.mese]+' '+last.anno;
     else title.textContent='RIEPILOGO';
   } else {
     btn.style.display='none';
@@ -1570,45 +1558,6 @@ function riepilogoBack(){
   renderRiepilogo();
 }
 
-function filteredMovimenti(){
-  const anno=document.getElementById('riepilogo-anno').value;
-  const mese=document.getElementById('riepilogo-mese').value;
-  return S.movimenti.filter(m=>{
-    if(m.categoria==='Saldo Iniziale')return false;
-    if(anno&&!m.data.startsWith(anno))return false;
-    if(mese&&parseInt(m.data.slice(5,7))!==parseInt(mese))return false;
-    const n=netto(m.importo,m.split);const t=tipo(n,m.tipoOverride);
-    if(riepilogoTipo==='uscite'&&t!=='S')return false;
-    if(riepilogoTipo==='entrate'&&t!=='E')return false;
-    return true;
-  });
-}
-
-function renderRiepilogo(){
-  const nav=riepilogoNav[riepilogoNav.length-1]||null;
-  const anno=document.getElementById('riepilogo-anno').value;
-  const mese=document.getElementById('riepilogo-mese').value;
-
-  // Determine what level to render
-  if(nav&&nav.level==='categoria'){
-    renderRiepilogoTransazioni(nav);
-  } else if(nav&&nav.level==='mese'){
-    renderRiepilogoCategorie(nav.anno, nav.mese);
-  } else if(!anno&&!mese){
-    // No filters: show years
-    renderRiepilogoAnni();
-  } else if(anno&&!mese){
-    // Anno selected, no mese: show 12 months of that year
-    renderRiepilogoMesi(parseInt(anno));
-  } else if(anno&&mese){
-    // Anno + mese: show categories of that month
-    renderRiepilogoCategorie(parseInt(anno), parseInt(mese));
-  }
-}
-
-function fmtMese(n){return['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'][n]||'';}
-function fmtMeseShort(n){return['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][n]||'';}
-
 function calcTot(movs){
   let t=0;
   movs.forEach(m=>{
@@ -1620,144 +1569,93 @@ function calcTot(movs){
   return t;
 }
 
-function mkRow(label,sublabel,amount,arrow,dataAttrs){
-  const d=document.createElement('div');
-  d.className='riepilogo-row';
-  const color=amount>=0?'#86efac':'#fca5a5';
-  if(dataAttrs)Object.entries(dataAttrs).forEach(([k,v])=>d.dataset[k]=v);
-  d.innerHTML='<div style="flex:1;min-width:0"><div class="riepilogo-label">'+esc(String(label))+'</div>'+
-    (sublabel?'<div class="riepilogo-count">'+sublabel+'</div>':'')+
-    '</div><div style="text-align:right;margin-left:12px">'+
-    '<div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(amount)+'</div>'+
-    (arrow?'<div style="font-size:11px;color:#4a5068">→</div>':'')+
-    '</div>';
-  return d;
+function fmtMese(n){return['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'][n]||'';}
+
+function renderRiepilogo(){
+  const nav=riepilogoNav[riepilogoNav.length-1]||null;
+  const anno=document.getElementById('riepilogo-anno').value;
+  const mese=document.getElementById('riepilogo-mese').value;
+  // Reset tap registry on each render
+  _tapId=0;Object.keys(_tap).forEach(k=>delete _tap[k]);
+  if(nav&&nav.level==='categoria')renderRiepilogoTransazioni(nav);
+  else if(nav&&nav.level==='mese')renderRiepilogoCategorie(nav.anno,nav.mese);
+  else if(!anno&&!mese)renderRiepilogoAnni();
+  else if(anno&&!mese)renderRiepilogoMesi(parseInt(anno));
+  else if(anno&&mese)renderRiepilogoCategorie(parseInt(anno),parseInt(mese));
 }
 
-function mkRowBar(label,sublabel,amount,maxAbs,dataAttrs){
-  const d=document.createElement('div');
-  d.className='riepilogo-row';
+function buildRow(label,sub,amount,barPct,barColor,tapFn){
   const color=amount>=0?'#86efac':'#fca5a5';
-  const barColor=amount>=0?'#10b981':'#ef4444';
-  const barW=maxAbs>0?Math.round(Math.abs(amount)/maxAbs*100):0;
-  if(dataAttrs)Object.entries(dataAttrs).forEach(([k,v])=>d.dataset[k]=v);
-  d.innerHTML='<div style="flex:1;min-width:0">'+
-    '<div class="riepilogo-label">'+esc(String(label))+'</div>'+
-    '<div class="riepilogo-bar-wrap"><div class="riepilogo-bar" style="width:'+barW+'%;background:'+barColor+'"></div></div>'+
-    (sublabel?'<div class="riepilogo-count">'+sublabel+'</div>':'')+
-    '</div><div style="text-align:right;margin-left:12px">'+
-    '<div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(amount)+'</div>'+
-    '<div style="font-size:11px;color:#4a5068">→</div>'+
-    '</div>';
-  return d;
+  const tid=tapFn?regTap(tapFn):'';
+  const arrow=tapFn?'<div style="font-size:11px;color:#4a5068;margin-top:2px">→</div>':'';
+  const bar=barPct!=null?'<div class="riepilogo-bar-wrap"><div class="riepilogo-bar" style="width:'+barPct+'%;background:'+(barColor||'#f59e0b')+'"></div></div>':'';
+  return '<div class="riepilogo-row" '+(tid?'ontouchend="doTap(\''+tid+'\')" onclick="doTap(\''+tid+'\')"':'')+' style="'+(tapFn?'cursor:pointer':'')+'">'
+    +'<div style="flex:1;min-width:0"><div class="riepilogo-label">'+esc(String(label))+'</div>'+bar
+    +(sub?'<div class="riepilogo-count">'+sub+'</div>':'')
+    +'</div><div style="text-align:right;margin-left:12px"><div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(amount)+'</div>'+arrow+'</div></div>';
 }
 
-function mkTotal(label,amount){
-  const d=document.createElement('div');
-  d.className='riepilogo-total';
+function buildTotal(label,amount){
   const color=amount>=0?'#86efac':'#fca5a5';
-  d.innerHTML='<div><div class="riepilogo-total-label">'+label+'</div></div>'+
-    '<div class="riepilogo-total-value" style="color:'+color+'">'+fmtEur(amount)+'</div>';
-  return d;
-}
-
-function setRiepilogoContent(nodes){
-  const cont=document.getElementById('riepilogo-content');
-  cont.innerHTML='';
-  nodes.forEach(n=>{if(n)cont.appendChild(n);});
+  return '<div class="riepilogo-total"><div><div class="riepilogo-total-label">'+label+'</div></div><div class="riepilogo-total-value" style="color:'+color+'">'+fmtEur(amount)+'</div></div>';
 }
 
 function renderRiepilogoAnni(){
   const anni=[...new Set(S.movimenti.map(m=>m.data?parseInt(m.data.slice(0,4)):null).filter(Boolean))].sort().reverse();
   if(!anni.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato</div>';return;}
-  const nodes=[];
-  const hint=document.createElement('div');
-  hint.className='setup-info';hint.style.marginBottom='14px';
-  hint.textContent='Tocca un anno per vedere i mesi.';
-  nodes.push(hint);
-  let grandTotal=0;
+  let html='<div class="setup-info" style="margin-bottom:14px">Tocca un anno per vedere i mesi.</div>';
+  let grand=0;
   anni.forEach(anno=>{
     const movs=S.movimenti.filter(m=>m.data&&m.data.startsWith(String(anno))&&m.categoria!=='Saldo Iniziale');
-    const tot=calcTot(movs);
-    grandTotal+=tot;
-    nodes.push(mkRow(String(anno),movs.length+' movimenti',tot,true,{action:'drill-anno',anno:String(anno)}));
+    const tot=calcTot(movs);grand+=tot;
+    html+=buildRow(String(anno),movs.length+' movimenti',tot,null,null,()=>drillAnno(anno));
   });
-  nodes.push(mkTotal('Totale complessivo',grandTotal));
-  setRiepilogoContent(nodes);
+  html+=buildTotal('Totale complessivo',grand);
+  document.getElementById('riepilogo-content').innerHTML=html;
 }
 
 function drillAnno(anno){
   document.getElementById('riepilogo-anno').value=String(anno);
   document.getElementById('riepilogo-mese').disabled=false;
-  riepilogoAnnoChange();
+  renderRiepilogoMesi(anno);
 }
 
 function renderRiepilogoMesi(anno){
-  const mesiNomi=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-  const rows=[];let grandTotal=0;
+  const mesiN=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const rows=[];let grand=0;
   for(let m2=1;m2<=12;m2++){
     const movs=S.movimenti.filter(mv=>mv.data&&mv.data.startsWith(anno+'-'+String(m2).padStart(2,'0'))&&mv.categoria!=='Saldo Iniziale');
     if(!movs.length)continue;
-    const tot=calcTot(movs);grandTotal+=tot;
-    rows.push({mese:m2,nome:mesiNomi[m2],tot,count:movs.length});
+    const tot=calcTot(movs);grand+=tot;
+    rows.push({mese:m2,nome:mesiN[m2],tot,count:movs.length});
   }
   if(!rows.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato per '+anno+'</div>';return;}
   const maxAbs=Math.max(...rows.map(r=>Math.abs(r.tot)))||1;
-  const nodes=[];
-  rows.forEach(r=>nodes.push(mkRowBar(r.nome,r.count+' movimenti',r.tot,maxAbs,{action:'drill-mese',anno:String(anno),mese:String(r.mese)})));
-  nodes.push(mkTotal('Totale '+anno,grandTotal));
-  setRiepilogoContent(nodes);
-}
-
-function renderRiepilogoCategorie(anno,mese){
-  const prefix=anno+'-'+String(mese).padStart(2,'0');
-  const movs=S.movimenti.filter(mv=>mv.data&&mv.data.startsWith(prefix)&&mv.categoria!=='Saldo Iniziale');
-  // Group by categoria
-  const catMap={};
-  movs.forEach(mv=>{
-    const n=netto(mv.importo,mv.split);const t=tipo(n,mv.tipoOverride);
-    let include=false;
-    if(riepilogoTipo==='tutte')include=true;
-    else if(riepilogoTipo==='uscite'&&t==='S')include=true;
-    else if(riepilogoTipo==='entrate'&&t==='E')include=true;
-    if(!include)return;
-    const cat=mv.categoria||'(senza categoria)';
-    if(!catMap[cat])catMap[cat]={tot:0,count:0};
-    catMap[cat].tot+=n;catMap[cat].count++;
+  let html='';
+  rows.forEach(r=>{
+    const bc=r.tot>=0?'#10b981':'#ef4444';
+    html+=buildRow(r.nome,r.count+' movimenti',r.tot,Math.round(Math.abs(r.tot)/maxAbs*100),bc,()=>drillMese(anno,r.mese));
   });
-  const cats=Object.entries(catMap).sort((a,b)=>Math.abs(b[1].tot)-Math.abs(a[1].tot));
-  if(!cats.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato</div>';return;}
-  const grandTotal=cats.reduce((a,b)=>a+b[1].tot,0);
-  const maxAbs=Math.max(...cats.map(c=>Math.abs(c[1].tot)))||1;
-  let html=`<div class="riepilogo-row header-row">
-    <div class="riepilogo-label" style="color:#f59e0b">${fmtMese(mese)} ${anno}</div>
-    <div class="riepilogo-amount" style="color:${grandTotal>=0?'#86efac':'#fca5a5'}">${fmtEur(grandTotal)}</div>
-  </div>`;
-  html+=cats.map(([cat,data])=>{
-    const color=data.tot>=0?'#86efac':'#fca5a5';
-    const barColor=data.tot>=0?'#10b981':'#ef4444';
-    const barW=Math.round(Math.abs(data.tot)/maxAbs*100);
-    return`<div class="riepilogo-row" onclick="drillCategoria(${anno},${mese},'${cat.replace(/'/g,"\'")}')">
-      <div style="flex:1;min-width:0">
-        <div class="riepilogo-label">${esc(cat)}</div>
-        <div class="riepilogo-bar-wrap"><div class="riepilogo-bar" style="width:${barW}%;--bar-color:${barColor}"></div></div>
-        <div class="riepilogo-count">${data.count} moviment${data.count===1?'o':'i'}</div>
-      </div>
-      <div style="text-align:right;margin-left:12px">
-        <div class="riepilogo-amount" style="color:${color}">${fmtEur(data.tot)}</div>
-        <div style="font-size:11px;color:#4a5068">→</div>
-      </div>
-    </div>`;
-  }).join('');
+  html+=buildTotal('Totale '+anno,grand);
   document.getElementById('riepilogo-content').innerHTML=html;
 }
+
+function drillMese(anno,mese){
+  document.getElementById('riepilogo-anno').value=String(anno);
+  document.getElementById('riepilogo-mese').value=String(mese);
+  document.getElementById('riepilogo-mese').disabled=false;
+  riepilogoNav.push({level:'mese',anno,mese});
+  updateRiepilogoBackBtn();
+  renderRiepilogoCategorie(anno,mese);
+}
+
 function renderRiepilogoCategorie(anno,mese){
   const prefix=anno+'-'+String(mese).padStart(2,'0');
   const movs=S.movimenti.filter(mv=>mv.data&&mv.data.startsWith(prefix)&&mv.categoria!=='Saldo Iniziale');
   const catMap={};
   movs.forEach(mv=>{
     const n=netto(mv.importo,mv.split),t=tipo(n,mv.tipoOverride);
-    let ok=riepilogoTipo==='tutte'||(riepilogoTipo==='uscite'&&t==='S')||(riepilogoTipo==='entrate'&&t==='E');
+    const ok=riepilogoTipo==='tutte'||(riepilogoTipo==='uscite'&&t==='S')||(riepilogoTipo==='entrate'&&t==='E');
     if(!ok)return;
     const cat=mv.categoria||'(senza categoria)';
     if(!catMap[cat])catMap[cat]={tot:0,count:0};
@@ -1765,20 +1663,16 @@ function renderRiepilogoCategorie(anno,mese){
   });
   const cats=Object.entries(catMap).sort((a,b)=>Math.abs(b[1].tot)-Math.abs(a[1].tot));
   if(!cats.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>Nessun dato</div>';return;}
-  const grandTotal=cats.reduce((a,b)=>a+b[1].tot,0);
+  const grand=cats.reduce((a,b)=>a+b[1].tot,0);
   const maxAbs=Math.max(...cats.map(c=>Math.abs(c[1].tot)))||1;
-  const nodes=[];
-  const hdr=document.createElement('div');
-  hdr.className='riepilogo-row header-row';
-  hdr.innerHTML='<div class="riepilogo-label" style="color:#f59e0b">'+fmtMese(mese)+' '+anno+'</div>'+
-    '<div class="riepilogo-amount" style="color:'+(grandTotal>=0?'#86efac':'#fca5a5')+'">'+fmtEur(grandTotal)+'</div>';
-  nodes.push(hdr);
+  const color=grand>=0?'#86efac':'#fca5a5';
+  let html='<div class="riepilogo-row header-row"><div class="riepilogo-label" style="color:#f59e0b">'+fmtMese(mese)+' '+anno+'</div><div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(grand)+'</div></div>';
   cats.forEach(([cat,data])=>{
-    nodes.push(mkRowBar(cat,data.count+' moviment'+(data.count===1?'o':'i'),data.tot,maxAbs,{action:'drill-cat',anno:String(anno),mese:String(mese),cat:cat}));
+    const bc=data.tot>=0?'#10b981':'#ef4444';
+    html+=buildRow(cat,data.count+' moviment'+(data.count===1?'o':'i'),data.tot,Math.round(Math.abs(data.tot)/maxAbs*100),bc,()=>drillCategoria(anno,mese,cat));
   });
-  setRiepilogoContent(nodes);
+  document.getElementById('riepilogo-content').innerHTML=html;
 }
-
 
 function drillCategoria(anno,mese,cat){
   riepilogoNav.push({level:'categoria',anno,mese,cat});
@@ -1791,36 +1685,30 @@ function renderRiepilogoTransazioni(nav){
   const prefix=anno+'-'+String(mese).padStart(2,'0');
   const movs=S.movimenti.filter(mv=>
     mv.data&&mv.data.startsWith(prefix)&&
-    (mv.categoria||'(senza categoria)')===cat&&
-    mv.categoria!=='Saldo Iniziale'
+    (mv.categoria||'(senza categoria)')===cat&&mv.categoria!=='Saldo Iniziale'
   ).sort((a,b)=>b.data.localeCompare(a.data)||b.id-a.id);
   if(!movs.length){document.getElementById('riepilogo-content').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>Nessuna spesa</div>';return;}
   const tot=movs.reduce((a,m)=>a+netto(m.importo,m.split),0);
-  const nodes=[];
-  const hdr=document.createElement('div');
-  hdr.className='riepilogo-row header-row';hdr.style.marginBottom='12px';
-  hdr.innerHTML='<div><div class="riepilogo-label" style="color:#f59e0b">'+esc(cat)+'</div>'+
+  const color=tot>=0?'#86efac':'#fca5a5';
+  let html='<div class="riepilogo-row header-row" style="margin-bottom:10px">'+
+    '<div><div class="riepilogo-label" style="color:#f59e0b">'+esc(cat)+'</div>'+
     '<div class="riepilogo-count">'+fmtMese(mese)+' '+anno+' · '+movs.length+' moviment'+(movs.length===1?'o':'i')+'</div></div>'+
-    '<div class="riepilogo-amount" style="color:'+(tot>=0?'#86efac':'#fca5a5')+'">'+fmtEur(tot)+'</div>';
-  nodes.push(hdr);
+    '<div class="riepilogo-amount" style="color:'+color+'">'+fmtEur(tot)+'</div></div>';
   movs.forEach(m=>{
     const n=netto(m.importo,m.split);
-    const color=n>=0?'#86efac':'#fca5a5';
+    const c=n>=0?'#86efac':'#fca5a5';
     const meta3=pm(m.portafoglio);
-    const d=document.createElement('div');
-    d.className='mov-detail-row';
-    d.dataset.action='edit-mov';
-    d.dataset.movid=String(m.id);
-    const splitLine=m.split?(' · <span style="color:#f59e0b;font-size:10px">split '+fmtEur(m.split)+(m.conchi?' ('+esc(m.conchi)+')':'')+'</span>'):'';
-    d.innerHTML='<div style="flex:1;min-width:0">'+
-      '<div style="color:#fff;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(m.descrizione||'(senza desc)')+'</div>'+
-      '<div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:2px">'+fmtIT(m.data)+' · <span style="color:'+meta3.saldo+';font-size:10px">'+esc(m.portafoglio||'')+'</span>'+splitLine+'</div>'+
-      '</div><div style="font-weight:900;font-size:14px;color:'+color+';flex-shrink:0;margin-left:10px">'+fmtEur(m.importo)+'</div>';
-    nodes.push(d);
+    const sp=m.split?(' · <span style="color:#f59e0b;font-size:10px">split '+fmtEur(m.split)+(m.conchi?' ('+esc(m.conchi)+')':'')+'</span>'):'';
+    const tid=regTap(()=>{editMov(m.id);showScreen('movimenti');});
+    html+='<div class="mov-detail-row" ontouchend="doTap(\''+tid+'\')" onclick="doTap(\''+tid+'\')">'
+      +'<div style="flex:1;min-width:0"><div style="color:#fff;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(m.descrizione||'(senza desc)')+'</div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:2px">'+fmtIT(m.data)+' · <span style="color:'+meta3.saldo+';font-size:10px">'+esc(m.portafoglio||'')+'</span>'+sp+'</div>'
+      +'</div><div style="font-weight:900;font-size:14px;color:'+c+';flex-shrink:0;margin-left:10px">'+fmtEur(m.importo)+'</div></div>';
   });
-  nodes.push(mkTotal('Totale categoria',tot));
-  setRiepilogoContent(nodes);
+  html+=buildTotal('Totale categoria',tot);
+  document.getElementById('riepilogo-content').innerHTML=html;
 }
+
 
 
 // ── INIT ───────────────────────────────────────────────────────────────────
