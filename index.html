@@ -499,13 +499,13 @@ window.onerror=function(msg,src,line,col,err){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div>
         <label class="field-label">Anno</label>
-        <select id="rp-anno" onchange="rpAnnoChange()" style="margin:0">
+        <select id="riepilogo-anno" onchange="rAnnoChange()" style="margin:0">
           <option value="">— Tutto —</option>
         </select>
       </div>
       <div>
         <label class="field-label">Mese</label>
-        <select id="rp-mese" onchange="rpRender()" style="margin:0" disabled>
+        <select id="riepilogo-mese" onchange="rRender()" style="margin:0" disabled>
           <option value="">— Tutti —</option>
           <option value="1">Gennaio</option><option value="2">Febbraio</option>
           <option value="3">Marzo</option><option value="4">Aprile</option>
@@ -518,14 +518,14 @@ window.onerror=function(msg,src,line,col,err){
     </div>
     <div style="margin-bottom:10px">
       <label class="field-label">Categoria</label>
-      <select id="rp-cat" onchange="rpRender()" style="margin:0" disabled>
+      <select id="riepilogo-cat" onchange="rRender()" style="margin:0" disabled>
         <option value="">— Tutte —</option>
       </select>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
-      <div class="chip active" id="rp-tipo-tutte"   onclick="rpSetTipo('tutte')">Tutte</div>
-      <div class="chip" id="rp-tipo-uscite"  onclick="rpSetTipo('uscite')">Solo uscite</div>
-      <div class="chip" id="rp-tipo-entrate" onclick="rpSetTipo('entrate')">Solo entrate</div>
+      <div class="chip active" id="riepilogo-tipo-tutte" onclick="setRiepilogoTipo('tutte')">Tutte</div>
+      <div class="chip" id="riepilogo-tipo-uscite" onclick="setRiepilogoTipo('uscite')">Solo uscite</div>
+      <div class="chip" id="riepilogo-tipo-entrate" onclick="setRiepilogoTipo('entrate')">Solo entrate</div>
     </div>
     <div id="rp-content"></div>
   </div>
